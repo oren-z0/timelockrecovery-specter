@@ -1,9 +1,127 @@
 {% extends "timelockrecovery/components/timelockrecovery_tab.jinja" %}
-{% block title %}Settings{% endblock %}
+{% block title %}Main{% endblock %}
 {% set tab = 'index' %}
 {% block content %}
-    <br><br>
-    <div class="tagline">&ldquo; TimelockrecoveryService 4thewin.&rdquo;</div>
+    <br />
+    <div class="card">
+        <h2>What is a Timelock Recovery?</h2>
+        <div class="large-note">
+            So you have accumulated a significant amount of Bitcoin in a well-secured wallet
+            with master keys: a random seed, a passphrase, and maybe even a multisig by multiple
+            devices.
+            <br />
+            Nobody else can access your funds.
+            <br />
+            But what if you lose your master keys? If you die in an accident - how could
+            loved-ones receive the funds?
+            <br />
+            Some wallets handle this issue with complicated multisig solutions, where your
+            inheritors and a 3rd-party service hold keys that together can access your funds.
+            Other Bitcoiners just leave clues to their inheritors how to find the master keys -
+            which could be an immediate security risk if those clues are exopsed.
+            <br />
+            Using <span class="italic">Bitcoin Relative Timelocks</span>, this extension
+            will create recovery plan - a sequence of two signed-transactions, which you can print and
+            give to your loved-ones to be broadcasted in case something happens to you
+            (another option is to store in a less-cryptic location than your master keys).
+            The transactions operate in the following way:
+            <ol class="same-font-size">
+                <li>
+                    The first transaction of the two keeps the funds in your wallet, but makes it
+                    possible to broadcast the second transaction after a predefined time-window
+                    of your choosing (i.e. 90 days).
+                    During this time, you can "cancel" the process by sending the funds elsewhere
+                    (or even to a new address in the same wallet).
+                    Optionally, you could use the extension to prepare and sign the cancellation
+                    transaction in advance, so you could broadcast it immediately (useful in case
+                    accessing the master keys during a crisis might be complicated, i.e. multisigs).
+                </li>
+                <li>
+                    Eventually, if the process has not been cancelled, broadcasting the second
+                    transaction will send the funds to specific addresses that you decided in advance,
+                    i.e. to your inheritors wallets or some backup wallet.
+                    A malicious user that found the signed-transactions could not change the funds'
+                    destination.
+                </li>
+                <li>
+                    When the process of transfering the funds begins, the first transaction
+                    will be saved on the blockchain, but the funds will still remain in your wallet.
+                    This will allow you to periodically (i.e. once a week) check block-explorers (i.e.
+                    <a target="_blank" href="https://mempool.space" rel="noopener noreferrer">
+                        mempool.space
+                    </a>,
+                    <a target="_blank" href="https://blockstream.info" rel="noopener noreferrer">
+                        blockstream.info
+                    </a>) whether that transaction has entered the blockchain, giving you
+                    enough time to cancel the process (act before the second transaction is
+                    broadcasted).
+                    You could also use 3rd-party WatchTower services to alert you if this happens.
+                </li>
+            </ol>
+            For more technical details about how the process works, see here (TODO: link to online
+            technical explanation).
+            <br />
+            Before we begin, please note:
+            <ol class="same-font-size">
+                <li>
+                    After creating the recovery plan,
+                    <b>
+                        WE RECOMMEND NOT TO USE THIS WALLET ANYMORE EITHER TO RECEIVE OR SEND
+                        FUNDS
+                    </b>
+                    (Unless you are an advanced user that always use coin-control).
+                    <br />
+                    Sending funds will cancel the entire recovery plan and make it unuseable
+                    (even a small amount).
+                    <br />
+                    Newly received funds will not be covered in an old recovery plan. Furthermore,
+                    creating a new recovery plan does not revoke the old recovery plan, and
+                    accidently broadcasting the old recovery plan might break the possibility
+                    to use the new recovery plan - making your inheritors (or future self) lose
+                    access to the newly received funds.
+                    <br />
+                    It is ok, however, to create multiple recovery plans with different details (i.e.
+                    different destinations, different fees, or different amount per destination).
+                    Just be aware that when one of the recovery processes begins, the other recovery
+                    plans may become unusable.
+                    <br />
+                    <span class="italic">
+                        Comment for advanced users: The service does NOT mark the UTXOs as frozen,
+                        because if the backup plan was breached and misused, the user must be able
+                        to move the funds easily during the time-window.
+                    </span>
+                </li>
+                <li>
+                    Please prepare in advance the addresses of your inheritors/backup-wallets.
+                </li>
+                <li>
+                    Since we are preparing this recovery plan for the long future, it is hard
+                    to estimate what the required fees will be.
+                    If the fee is too low, your inheritors, who don't have access to the master
+                    keys, will not be able to simply "replace-by-fee" and use a higher fee.
+                    At the moment of writing this code (year 2024) this is not a big deal, because
+                    there are acceleration-services, such as
+                    <a target="_blank" href="https://mempool.space/accelerator" rel="noopener noreferrer">
+                        mempool.space's accelerator
+                    </a>, that allows to boost selected transactions for direct payment.
+                    Just in case this service will not be available in the future, the first
+                    transaction in the sequence will send a small amount of 600 sats to each
+                    destination address. This will allow advance users to boost the
+                    first transaction by spending their unmined UTXO in a mechanism called
+                    Child-Pay-For-Parent.
+                </li>
+            </ol>
+            Ready to go?
+        </div>
+        <div class="progress-buttons-bar">
+            <div></div>
+            <div>
+                <a class="btn" href="{{ url_for(service.id+'_endpoint.step1')}}">
+                    Install Service &amp; Start 👉
+                </a>
+            </div>
+        </div>
+    </div>
 {% endblock %}
 
 

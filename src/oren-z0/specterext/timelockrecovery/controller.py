@@ -30,7 +30,12 @@ def index():
         "timelockrecovery/index.jinja",
     )
 
-
+@timelockrecovery_endpoint.route("/step1", methods=["GET"])
+@login_required
+def step1():
+    user = app.specter.user_manager.get_user()
+    user.add_service(TimelockrecoveryService.id)
+    return "You have reached step1"
 
 @timelockrecovery_endpoint.route("/transactions")
 @login_required

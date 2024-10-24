@@ -1,1 +1,25 @@
 /* This is the place to put all your styles */
+.large-note {
+    font-size: 1.3em;
+    --tw-text-opacity: 1;
+    color: rgb(207 207 208 / var(--tw-text-opacity));
+}
+
+.large-note a {
+    --tw-text-opacity: 1;
+    color: rgb(41 151 255 / var(--tw-text-opacity));
+}
+
+.italic {
+    font-style: italic;
+}
+
+.same-font-size {
+    font-size: 1em;
+}
+
+.progress-buttons-bar {
+    margin-top: 1em;
+    display: flex;
+    justify-content: space-between;
+}
