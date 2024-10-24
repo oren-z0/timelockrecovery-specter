@@ -1,0 +1,29 @@
+[build-system]
+requires = [
+    "setuptools<=65.7.0", 
+    "setuptools_scm[toml]>=6.2",
+    # "cryptoadvance.specter==v2.0.0rc27.dev1+g19d42e332.d20230220"
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oren-z0_timelockrecovery"
+
+authors = [
+  { name="Oren"}
+]
+description = "A description which should get changed"
+
+urls.Homepage = "https://github.com/oren-z0/specterext-timelockrecovery"
+
+readme = "README.md"
+
+requires-python = ">=3.7,<4.0"
+
+dynamic = ["dependencies", "version"]
+
+classifiers =[
+    'Programming Language :: Python :: 3',
+    'Operating System :: OS Independent',
+    'Framework :: Flask',
+]

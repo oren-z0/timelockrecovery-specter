@@ -1,0 +1,5 @@
+recursive-include src/oren-z0/specterext/timelockrecovery/templates *
+recursive-include src/oren-z0/specterext/timelockrecovery/static *
+recursive-include src/oren-z0/specterext/timelockrecovery/*/LC_MESSAGES *.mo
+recursive-include src/oren-z0/specterext/timelockrecovery/translations/*/LC_MESSAGES *.po
+include requirements.txt
