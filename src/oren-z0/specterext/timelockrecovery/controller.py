@@ -33,9 +33,18 @@ def index():
 @timelockrecovery_endpoint.route("/step1", methods=["GET"])
 @login_required
 def step1():
-    user = app.specter.user_manager.get_user()
-    user.add_service(TimelockrecoveryService.id)
-    return "You have reached step1"
+    wallet_names = sorted(current_user.wallet_manager.wallets.keys())
+    wallets = [current_user.wallet_manager.wallets[name] for name in wallet_names]
+    return render_template(
+        "timelockrecovery/step1.jinja",
+        wallets=wallets,
+    )
+
+@timelockrecovery_endpoint.route("/step2", methods=["GET"])
+@login_required
+def step2():
+    return "You have reached step2"
+
 
 @timelockrecovery_endpoint.route("/transactions")
 @login_required

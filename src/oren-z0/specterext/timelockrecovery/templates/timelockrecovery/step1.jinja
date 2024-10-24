@@ -1,0 +1,39 @@
+{% extends "timelockrecovery/components/timelockrecovery_tab.jinja" %}
+{% block title %}Step 1{% endblock %}
+{% set tab = 'index' %}
+{% block content %}
+    <br />
+    <div class="card">
+        <h2>Step 1: Choose a wallet</h2>
+        <div class="large-note">
+            <select id="selected-wallet">
+                {% for wallet in wallets %}
+                    <option value="{{ wallet.alias }}">{{ wallet.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="progress-buttons-bar">
+            <div>
+                <a class="btn" href="{{ url_for(service.id+'_endpoint.index')}}">
+                    👈 Back
+                </a>
+            </div>
+            <div>
+                <a class="btn" href="#" id="next-button">
+                    Next 👉
+                </a>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+
+
+{% block scripts %}
+    <script>
+    const step2url = "{{ url_for(service.id+'_endpoint.step2')}}";
+    document.getElementById('next-button').onclick = () => {
+        window.location.href = `${step2url}?wallet=${encodeURIComponent(document.getElementById('selected-wallet').value)}`;
+    };
+    </script>
+{% endblock %}
