@@ -1,5 +1,5 @@
 import logging
-from flask import redirect, render_template, request, url_for, flash
+from flask import redirect, render_template, request, url_for, flash, abort
 from flask import current_app as app
 from flask_login import login_required, current_user
 
@@ -7,6 +7,7 @@ from cryptoadvance.specter.specter import Specter
 from cryptoadvance.specter.services.controller import user_secret_decrypted_required
 from cryptoadvance.specter.user import User
 from cryptoadvance.specter.wallet import Wallet
+from cryptoadvance.specter.specter_error import SpecterError
 from .service import TimelockrecoveryService
 
 
@@ -43,7 +44,18 @@ def step1():
 @timelockrecovery_endpoint.route("/step2", methods=["GET"])
 @login_required
 def step2():
-    return "You have reached step2"
+    wallet_id = request.args.get('wallet')
+    wallet: Wallet = current_user.wallet_manager.wallets.get(wallet_id)
+    if not wallet:
+        raise SpecterError(
+            "Wallet could not be loaded. Are you connected with Bitcoin Core?"
+        )
+    if wallet.pending_psbts:
+        raise SpecterError(
+            """The service does not support wallets with pending unsigned transactions,
+please delete them, or move all available funds to a new wallet."""
+        )
+    return "You have reached step2."
 
 
 @timelockrecovery_endpoint.route("/transactions")
