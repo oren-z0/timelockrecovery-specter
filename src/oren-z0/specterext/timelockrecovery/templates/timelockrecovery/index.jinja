@@ -116,7 +116,11 @@
         <div class="progress-buttons-bar">
             <div></div>
             <div>
-                <a class="btn" href="{{ url_for(service.id+'_endpoint.step1')}}">
+                <form id="next-form" action="{{ url_for(service.get_blueprint_name() + '.step1_post') }}" method="POST">
+                    <input type="hidden" class="csrf-token" name="csrf_token" value="{{ csrf_token() }}" />
+                </form>
+
+                <a class="btn" href="#" id="next-button">
                     Install Service &amp; Start 👉
                 </a>
             </div>
@@ -128,5 +132,8 @@
 
 {% block scripts %}
     <script>
+        document.getElementById('next-button').onclick = () => {
+            document.getElementById('next-form').submit();
+        };
     </script>
 {% endblock %}
