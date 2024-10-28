@@ -6,7 +6,7 @@
     - active_menuitem: Current active tab. Options: 'general', 'settings', ...
  #}
 {% macro timelockrecovery_menu(active_menuitem) -%}
-	<nav class="text-center text-dark-200 border-b border-dark-600">
+	<nav class="text-center text-dark-200 border-b border-dark-600 mb-8">
 		<ul class="flex flex-wrap -mb-px">
 			{{ menu_item(service.id, 'index', 'Main', active_menuitem, isLeft=true) }}
 			{{ menu_item(service.id, 'transactions', 'Transactions', active_menuitem) }}
