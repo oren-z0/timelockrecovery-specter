@@ -23,3 +23,44 @@
     display: flex;
     justify-content: space-between;
 }
+
+.warning {
+    color: #edb10a;
+}
+
+.icon-info {
+    display: flex;
+    justify-content: center;
+    position: relative;
+}
+.icon-info .icon-info-text {
+    display: none;
+    background: #262626;
+    border: 1px solid grey;
+    border-radius: 5px;
+    padding: 0.5em;
+    position: absolute;
+    left: 40px;
+    top: 0px;
+    z-index: 11;
+}
+.icon-info .icon-info-text:before, .icon-info .icon-info-text:after {
+    content: "";
+    position: absolute;
+    left: -10px;
+    top: 7px;
+    border-style: solid;
+    border-width: 10px 10px 10px 0;
+    border-color: transparent grey;
+}
+.icon-info .icon-info-text:after {
+    left: -8px;
+    border-right-color: #262626;
+}
+.icon-info:hover .icon-info-text, .icon-info:focus .icon-info-text {
+    display: inline-block;
+}
+
+.svg-selftransfer, .svg-mixed {
+    filter: invert(77%) sepia(68%) saturate(3384%) hue-rotate(44deg) brightness(112%) contrast(74%);
+}

@@ -70,3 +70,18 @@ class TimelockrecoveryService(Service):
     def set_associated_wallet(cls, wallet: Wallet):
         """Set the Specter `Wallet` that is currently associated with this Service"""
         cls.update_current_user_service_data({cls.SPECTER_WALLET_ALIAS: wallet.alias})
+
+    @classmethod
+    def get_or_reserve_address(cls, wallet: Wallet):
+        addresses = wallet.get_associated_addresses(cls.id)
+        if addresses:
+            return addresses[0]
+        index = wallet.address_index
+        address_found = False
+        while not address_found:
+            index += 1
+            addr = wallet.get_address(index)
+            addr_obj = wallet.get_address_obj(addr)
+            address_found = not addr_obj.used and not addr_obj.is_reserved
+        wallet.associate_address_with_service(address=addr, service_id=cls.id, label=f"Address #{index} - Timelock Recovery Alert Address")
+        return addr_obj

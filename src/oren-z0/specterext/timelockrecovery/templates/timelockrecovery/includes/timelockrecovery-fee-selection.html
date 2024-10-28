@@ -1,0 +1,297 @@
+<template id="timelockrecovery-fee-selection">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='output.css') }}">
+    <div class="fee_container space-y-3">
+      <div class="grid grid-cols-2 gap-3">
+          <label class="checkbox-wrapper">
+              <input type="radio" class="checkbox-input" id="timelockrecovery_fee_option_dynamic" name="timelockrecovery_fee_options" value="dynamic" >
+              <span class="checkbox-label">{{ _("Dynamic") }}</span>
+          </label>
+          <label class="checkbox-wrapper">
+              <input type="radio" class="checkbox-input" id="timelockrecovery_fee_option_manual" name="timelockrecovery_fee_options" value="manual" >
+              <span class="checkbox-label">{{ _("Manual") }}</span>
+          </label>
+      </div>
+
+      <div id="timelockrecovery_fee_manual" class="floating-wrapper" style="display: none">
+          {% set min_fee = 0.1 if specter.is_liquid else 1 %}
+          <input type="number" class="fee_rate floating-input peer" placeholder=" " name="timelockrecovery_fee_rate" id="timelockrecovery_fee_rate" min="{{min_fee}}" step="0.1" value="{{min_fee}}" autocomplete="off">
+          <label class="floating-label">{{ _("Fee Rate") }} (sat/vbyte)</label>
+          <tool-tip width="200px" class="floating-info">
+              <span slot="paragraph">
+                  {{ _("{} sat/vbyte is the minimal fee rate.".format(min_fee)) }}
+              </span>
+          </tool-tip>
+      </div>
+
+      <div id="timelockrecovery_fee_dynamic" style="display: block">
+          <div id="timelockrecovery_blocks"></div>
+          <input type="hidden" id="timelockrecovery_fee_rate_dynamic" name="timelockrecovery_fee_rate_dynamic" value="{{min_fee}}">
+
+          <div class="border-2 border-dark-700 bg-dark-800 rounded-lg px-6 py-3">
+              <input type="range" min="{{min_fee}}" step="0.1" id="timelockrecovery_fees_slider" class="w-full h-2 bg-dark-500 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
+              <div class="w-full text-center text-base mt-2 font-medium">
+                  {{ _("Estimated speed:") }} <span id="timelockrecovery_fee_rate_speed_text"></span>
+                  <span class="note">({{ _("Fee rate:") }} <span id="timelockrecovery_fee_rate_dynamic_text"></span> sat/vbyte)</span>
+              </div>
+          </div>
+      </div>
+
+      <label class="rbf-label checkbox-wrapper-inline" style="display: none">
+          <input type="checkbox" class="rbf-checkbox checkbox-input" name="timelockrecovery_rbf" id="timelockrecovery_rbf">
+          <span class="checkbox-label">{{ _("RBF Enabled") }}</span>
+      </label>
+  </div>
+</template>
+
+<script type="module">
+  class AlertTransactionFeeSelection extends HTMLElement {
+      constructor() {
+          super();
+          var shadow = this.attachShadow({mode: 'open'});
+          this.wholeTemplate = shadow
+          var template_content = document.getElementById('timelockrecovery-fee-selection').content;
+          var clone = template_content.cloneNode(true);
+          this.feeContainer = clone.querySelector(".fee_container")
+
+          // The radio-button for manual
+          this.fee_option_manual =  clone.querySelector("#timelockrecovery_fee_option_manual")
+          this.fee_option_manual.addEventListener('click', (event) => {
+              this.showFeeOption("manual")
+          });
+
+          // The radio-button for dynamic
+          this.fee_option_dynamic =  clone.querySelector("#timelockrecovery_fee_option_dynamic")
+          this.fee_option_dynamic.addEventListener('click', (event) => {
+              this.showFeeOption("dynamic")
+          });
+
+          // Manual or dynamic div
+          this.fee_manual = clone.querySelector("#timelockrecovery_fee_manual")
+          this.fee_dynamic = clone.querySelector("#timelockrecovery_fee_dynamic")
+
+          // The manual rate
+          this.feeRate = clone.querySelector("#timelockrecovery_fee_rate")
+
+          // The slider && dynamic rate
+          this.feesSlider = clone.querySelector("#timelockrecovery_fees_slider")
+          this.feesSlider.addEventListener("input", (event) => {
+              this.dynamicFeeUpdated()
+          });
+          this.feeRateDynamic = clone.querySelector("#timelockrecovery_fee_rate_dynamic")
+          this.feeRateDynamicText = clone.querySelector("#timelockrecovery_fee_rate_dynamic_text")
+
+          // A text explaining the rate like: "Fast (30 minutes)"
+          this.fee_rate_speed_text = clone.querySelector("#timelockrecovery_fee_rate_speed_text")
+
+          // RBF
+          this.rbfEnabled = this.getAttribute('rbf-enabled') == null ? true : this.getAttribute('rbf-enabled').toLowerCase() == "true"
+          this.rbfLabel = clone.querySelector(".rbf-label")
+          this.rbfOption = clone.getElementById("timelockrecovery_rbf")
+
+          // Presets
+          this.feeOptionPreset = this.getAttribute('fee-option-preset') == null ? "dynamic" : this.getAttribute('fee-option-preset')
+          this.rbfOption.value = "true"
+          this.rbfOption.checked = true
+
+          this.createLighterDOMNodes()
+
+          // Attach the created element to the shadow dom
+          shadow.appendChild(clone);
+
+      }
+
+      /**
+       * here, we create some kind of mirror-nodes in the lighterDOM so that the outer form can
+       * pick the values up. They are all hidden and we'll clone them from their "peer" from the shadowDOM
+       * Check https://stackoverflow.com/a/38667839/330964 for details
+       */
+      createLighterDOMNodes() {
+          this.ld = {} // in order to separate clearly, we store all of them here
+
+          /* We need to expose:
+              * fee_option (either manual or dynamic)
+              * fee_rate_dynamic
+              * fee_rate
+              * rbf
+          */
+
+          // fee_option
+          this.ld.feeOption = document.createElement("input");
+          this.ld.feeOption.type = "hidden";
+          this.ld.feeOption.value = this.feeOptionPreset;
+          this.ld.feeOption.name = "fee_option";
+          this.appendChild(this.ld.feeOption);
+
+          // timelockrecovery_fee_rate_dynamic
+          this.ld.feeRate = this.feeRate.cloneNode(true);
+          this.ld.feeRate.classList.add("hidden");
+          this.ld.feeRate.type = "hidden";
+          this.appendChild(this.ld.feeRate);
+
+          // timelockrecovery_fee_rate
+          this.ld.feeRateDynamic = this.feeRateDynamic.cloneNode(true);
+          this.ld.feeRateDynamic.classList.add("hidden");
+          this.ld.feeRateDynamic.type = "hidden";
+          this.appendChild(this.ld.feeRateDynamic);
+
+          // timelockrecovery_rbf
+          this.ld.rbfOption = this.rbfOption.cloneNode(true);
+          this.ld.rbfOption.type = "hidden";
+          this.ld.rbfOption.value = this.rbfOption.value;
+          this.appendChild(this.ld.rbfOption);
+      }
+
+      /**
+       * Browser calls this method when the element is added to the document
+       * (can be called many times if an element is repeatedly added/removed)
+       */
+      connectedCallback() {
+          // fetch the fees
+          this.fetchFees()
+          // Looks like this: {"result": {"fastestFee": 8, "halfHourFee": 8, "hourFee": 8, "minimumFee": 1}, "error_messages": []}
+
+          this.showFeeOption(this.feeOptionPreset)
+
+          // Show RBF checkbox if RBF is enabled
+          if (this.rbfEnabled) {
+              this.rbfLabel.style.display = "block";
+          }
+
+          // Setting up event listeners
+          this.feeRate.addEventListener("input", (event) => {
+              this.manualFeeUpdated();
+          })
+
+          this.rbfOption.addEventListener("click", (event) => {
+              this.rbfUpdated();
+          })
+      }
+
+      // Fetches fees from the Specter API
+      async fetchFees(wallet_alias) {
+          let url = `{{ url_for('wallets_endpoint_api.fees') }}`
+          var formData = new FormData();
+          try {
+              const response = await fetch(
+                  url,
+                  {
+                      method: 'GET'
+                  }
+              );
+              if(response.status != 200){
+                  showError(await response.text());
+                  console.log("Error while fetching fees")
+                  return {"result": {"fastestFee": 8, "halfHourFee": 8, "hourFee": 8, "minimumFee": 1}, "error_messages": ["Couldn't fetch fees from server. Replaced with assumptions"]};
+              }
+              const fees = await response.json();
+              this.fees = fees["result"]
+              this.initWithFees()
+          } catch(e) {
+              console.log(e);
+              showError(`{{ _("Failed to fetch fees") }}: ${e}`);
+          }
+      }
+
+      // Gets executed after fee initialisation
+      initWithFees() {
+          // this.feesSlider.min is set above via min_fee
+          // For low fee environment, API results are integers
+          if (this.fees["fastestFee"] == 1) {
+              this.feesSlider.max = 1.5
+          }
+          else {
+              let feeSliderMax = Math.floor(this.fees["fastestFee"] * 1.4)
+              this.feesSlider.max =  feeSliderMax >= 2 ? feeSliderMax : 2
+          }
+          // Avoid calculating the default value with a very high fastestFee
+          if (this.fees["fastestFee"] > 2 * this.fees["halfHourFee"]) {
+              this.feesSlider.value = this.fees["halfHourFee"]
+          }
+          else {
+              this.feesSlider.value = this.fees["fastestFee"]
+          }
+          this.dynamicFeeUpdated() // otherwise no text next to estimated speed
+      }
+
+      showFeeOption(option) {
+          if (option == 'dynamic') {
+              this.fee_manual.style.display ='none'
+              this.fee_dynamic.style.display = 'block'
+              this.ld.feeOption.value = "dynamic"
+              this.fee_option_dynamic.checked = true
+          } else {
+              this.fee_manual.style.display ='block'
+              this.fee_dynamic.style.display = 'none'
+              this.ld.feeOption.value = "manual"
+              this.fee_option_manual.checked = true
+          }
+          this.dispatchChange()
+      }
+
+      // Transports Shadow DOM value to Light DOM
+      manualFeeUpdated() {
+          this.ld.feeRate.value = this.feeRate.value
+          this.dispatchChange()
+      }
+
+      // Transports Shadow DOM value to Light DOM & sets text values for slider
+      dynamicFeeUpdated() {
+          this.feeRateDynamicText.innerText = this.feesSlider.value;
+          this.feeRateDynamic.value = this.feesSlider.value;
+          this.ld.feeRateDynamic.value = this.feesSlider.value;
+          let minFee = this.fees["minimumFee"]
+          let hourFee = this.fees["hourFee"]
+          let halfHourFee = this.fees["halfHourFee"]
+          let fastestFee = this.fees["fastestFee"]
+          if (this.feesSlider.value < minFee + ((hourFee - minFee) / 2)) {
+              this.fee_rate_speed_text.innerText = '{{ _("Very slow - unrecommended for long-range recovery solution") }}';
+          } else if (this.feesSlider.value < hourFee) {
+              this.fee_rate_speed_text.innerText = '{{ _("Slow - unrecommended for long-range recovery solution") }}';
+          } else if (this.feesSlider.value < halfHourFee) {
+              this.fee_rate_speed_text.innerText = '{{ _("Medium (1 hour in current fee rates) - unrecommended for long-range recovery solution") }}';
+          } else if (this.feesSlider.value < fastestFee) {
+              this.fee_rate_speed_text.innerText = '{{ _("Fast (30 minutes in current fee rates)") }}';
+          } else if (this.feesSlider.value < fastestFee * 10) {
+              this.fee_rate_speed_text.innerText = '{{ _("Very fast (10 minutes in current fee rates)") }}';
+          } else {
+              this.fee_rate_speed_text.innerText = '{{ _("Overpaid! (10 minutes in current fee rates)") }}';
+          }
+          this.dispatchChange()
+      }
+
+      // Returns fees that can be picked up
+      selectedFee() {
+          if (this.ld.feeOption.value == "manual") {
+              let manualRate = this.ld.feeRate.value
+              return manualRate
+          }
+          else {
+              let dynamicRate = this.ld.feeRateDynamic.value
+              return dynamicRate
+          }
+      }
+
+      // Updates Light DOM values for the form
+      rbfUpdated() {
+          if (this.rbfOption.checked) {
+              this.ld.rbfOption.value = "true"
+          }
+          else {
+              this.ld.rbfOption.value = "false"
+          }
+          this.dispatchChange()
+      }
+
+      deactivateRbf() {
+          this.rbfLabel.remove()
+          this.ld.rbfOption.value = "false"
+      }
+
+      dispatchChange() {
+        this.dispatchEvent(new Event('change'))
+      }
+  }
+
+  customElements.define('timelockrecovery-fee-selection', AlertTransactionFeeSelection);
+
+</script>

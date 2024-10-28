@@ -1,4 +1,5 @@
 import logging
+import random
 from flask import redirect, render_template, request, url_for, flash, abort
 from flask import current_app as app
 from flask_login import login_required, current_user
@@ -8,8 +9,10 @@ from cryptoadvance.specter.services.controller import user_secret_decrypted_requ
 from cryptoadvance.specter.user import User
 from cryptoadvance.specter.wallet import Wallet
 from cryptoadvance.specter.specter_error import SpecterError
+from cryptoadvance.specter.commands.psbt_creator import PsbtCreator
 from .service import TimelockrecoveryService
 
+rand = random.randint(0, 1e32)
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +34,7 @@ def verify_not_liquid():
 @timelockrecovery_endpoint.route("/")
 @login_required
 def index():
+    verify_not_liquid()
     return render_template(
         "timelockrecovery/index.jinja",
     )
@@ -38,6 +42,7 @@ def index():
 @timelockrecovery_endpoint.route("/step1", methods=["POST"])
 @login_required
 def step1_post():
+    verify_not_liquid()
     user = app.specter.user_manager.get_user()
     user.add_service(TimelockrecoveryService.id)
     return redirect(url_for(f"{ TimelockrecoveryService.get_blueprint_name()}.step1_get"))
@@ -45,6 +50,7 @@ def step1_post():
 @timelockrecovery_endpoint.route("/step1", methods=["GET"])
 @login_required
 def step1_get():
+    verify_not_liquid()
     wallet_names = sorted(current_user.wallet_manager.wallets.keys())
     wallets = [current_user.wallet_manager.wallets[name] for name in wallet_names]
     return render_template(
@@ -55,18 +61,27 @@ def step1_get():
 @timelockrecovery_endpoint.route("/step2", methods=["GET"])
 @login_required
 def step2():
-    wallet_id = request.args.get('wallet')
-    wallet: Wallet = current_user.wallet_manager.wallets.get(wallet_id)
+    verify_not_liquid()
+    wallet_alias = request.args.get('wallet')
+    wallet: Wallet = current_user.wallet_manager.get_by_alias(wallet_alias)
     if not wallet:
         raise SpecterError(
             "Wallet could not be loaded. Are you connected with Bitcoin Core?"
         )
-    if wallet.pending_psbts:
-        raise SpecterError(
-            """The service does not support wallets with pending unsigned transactions,
-please delete them, or move all available funds to a new wallet."""
-        )
-    return "You have reached step2."
+    # update balances in the wallet
+    wallet.update_balance()
+    # update utxo list for coin selection
+    wallet.check_utxo()
+
+    reserved_address = TimelockrecoveryService.get_or_reserve_address(wallet)
+
+    return render_template(
+        "timelockrecovery/step2.jinja",
+        wallet=wallet,
+        specter=app.specter,
+        rand=rand,
+        reserved_address=reserved_address,
+    )
 
 
 @timelockrecovery_endpoint.route("/transactions")
@@ -112,3 +127,14 @@ def settings_post():
         wallet = current_user.wallet_manager.get_by_alias(used_wallet_alias)
         TimelockrecoveryService.set_associated_wallet(wallet)
     return redirect(url_for(f"{ TimelockrecoveryService.get_blueprint_name()}.settings_get"))
+
+@timelockrecovery_endpoint.route("/create_psbt/<wallet_alias>", methods=["POST"])
+@login_required
+def create_psbt(wallet_alias):
+    wallet: Wallet = current_user.wallet_manager.get_by_alias(wallet_alias)
+    psbt_creator = PsbtCreator(
+        app.specter, wallet, "json", request_json=request.json
+    )
+    psbt_creator.kwargs["readonly"] = True
+    psbt = psbt_creator.create_psbt(wallet)
+    return {"result": psbt}
