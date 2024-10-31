@@ -12,9 +12,9 @@ logger = logging.getLogger(__name__)
 class TimelockrecoveryService(Service):
     id = "timelockrecovery"
     name = "Timelock Recovery Service"
-    icon = "timelockrecovery/img/ghost.png"
-    logo = "timelockrecovery/img/logo.jpeg"
-    desc = "Where a timelockrecovery grows bigger."
+    icon = "timelockrecovery/img/logo160.png"
+    logo = "timelockrecovery/img/logo820.png"
+    desc = "Create timelock-based recovery solutions."
     has_blueprint = True
     blueprint_module = "oren-z0.specterext.timelockrecovery.controller"
 
