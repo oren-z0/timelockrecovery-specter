@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class TimelockrecoveryService(Service):
     id = "timelockrecovery"
-    name = "Timelock Recovery Service"
+    name = "Timelock Recovery"
     icon = "timelockrecovery/img/logo160.png"
     logo = "timelockrecovery/img/logo820.png"
     desc = "Create timelock-based recovery solutions."

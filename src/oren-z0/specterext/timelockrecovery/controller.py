@@ -23,6 +23,10 @@ def specter() -> Specter:
     ''' convenience for getting the specter-object'''
     return app.specter
 
+def verify_not_liquid():
+    if app.specter.is_liquid:
+        raise SpecterError("Timelock Recovery does not support Liquid")
+
 
 @timelockrecovery_endpoint.route("/")
 @login_required

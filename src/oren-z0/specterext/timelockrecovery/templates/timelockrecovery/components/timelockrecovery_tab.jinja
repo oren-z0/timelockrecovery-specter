@@ -1,7 +1,7 @@
 {% extends "timelockrecovery/base.jinja" %}
 {% block main %}
     <img src="{{ url_for(service.id +'_endpoint' + '.static', filename=service.logo) }}" width="100"/>
-    <h1 class="pt-3">Timelock Recovery Service</h1>
+    <h1 class="pt-3">Timelock Recovery</h1>
     {% from 'timelockrecovery/components/timelockrecovery_menu.jinja' import timelockrecovery_menu with context %}
     {{ timelockrecovery_menu(tab) }}
     {% block content %}
