@@ -64,3 +64,9 @@
 .svg-selftransfer, .svg-mixed {
     filter: invert(77%) sepia(68%) saturate(3384%) hue-rotate(44deg) brightness(112%) contrast(74%);
 }
+
+.funds-left-wrapper {
+    min-height: 2.25rem;
+    padding: 0;
+    margin: 0;
+}

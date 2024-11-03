@@ -13,22 +13,21 @@
       </div>
 
       <div id="timelockrecovery_fee_manual" class="floating-wrapper" style="display: none">
-          {% set min_fee = 0.1 if specter.is_liquid else 1 %}
-          <input type="number" class="fee_rate floating-input peer" placeholder=" " name="timelockrecovery_fee_rate" id="timelockrecovery_fee_rate" min="{{min_fee}}" step="0.1" value="{{min_fee}}" autocomplete="off">
+          <input type="number" class="fee_rate floating-input peer" placeholder=" " name="timelockrecovery_fee_rate" id="timelockrecovery_fee_rate" min="1" step="0.1" value="1" autocomplete="off">
           <label class="floating-label">{{ _("Fee Rate") }} (sat/vbyte)</label>
           <tool-tip width="200px" class="floating-info">
               <span slot="paragraph">
-                  {{ _("{} sat/vbyte is the minimal fee rate.".format(min_fee)) }}
+                  {{ _("1 sat/vbyte is the minimal fee rate.") }}
               </span>
           </tool-tip>
       </div>
 
       <div id="timelockrecovery_fee_dynamic" style="display: block">
           <div id="timelockrecovery_blocks"></div>
-          <input type="hidden" id="timelockrecovery_fee_rate_dynamic" name="timelockrecovery_fee_rate_dynamic" value="{{min_fee}}">
+          <input type="hidden" id="timelockrecovery_fee_rate_dynamic" name="timelockrecovery_fee_rate_dynamic" value="1">
 
           <div class="border-2 border-dark-700 bg-dark-800 rounded-lg px-6 py-3">
-              <input type="range" min="{{min_fee}}" step="0.1" id="timelockrecovery_fees_slider" class="w-full h-2 bg-dark-500 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
+              <input type="range" min="1" step="0.1" id="timelockrecovery_fees_slider" class="w-full h-2 bg-dark-500 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
               <div class="w-full text-center text-base mt-2 font-medium">
                   {{ _("Estimated speed:") }} <span id="timelockrecovery_fee_rate_speed_text"></span>
                   <span class="note">({{ _("Fee rate:") }} <span id="timelockrecovery_fee_rate_dynamic_text"></span> sat/vbyte)</span>
@@ -261,14 +260,11 @@
 
       // Returns fees that can be picked up
       selectedFee() {
-          if (this.ld.feeOption.value == "manual") {
-              let manualRate = this.ld.feeRate.value
-              return manualRate
+          const fee = this.ld.feeOption.value == "manual" ? this.ld.feeRate.value : this.ld.feeRateDynamic.value;
+          if (fee === "" || Number(fee) < 0 || Number.isNaN(Number(fee))) {
+              return "";
           }
-          else {
-              let dynamicRate = this.ld.feeRateDynamic.value
-              return dynamicRate
-          }
+          return fee;
       }
 
       // Updates Light DOM values for the form

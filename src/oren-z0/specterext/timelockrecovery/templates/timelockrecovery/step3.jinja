@@ -1,0 +1,500 @@
+{% extends "timelockrecovery/components/timelockrecovery_tab.jinja" %}
+{% set tab = 'index' %}
+
+{% block content %}
+	{% include "includes/address-label.html" %}
+	{% include "includes/qr-scanner.html" %}
+
+	{% include "includes/hwi/hwi.jinja" %}
+	{% from 'includes/overlay/sign_tx_method.jinja' import sign_tx_method %}
+	{% for device in wallet.devices %}
+		{{ sign_tx_method(wallet, device, psbt, specter.info.chain) }}
+	{% endfor %}
+	<div style="display: none;"><!--<style>-->
+		.tx_info {
+			padding: 1em;
+			border: 1px solid #506072;
+			border-radius: 4px;
+			text-align: center;
+			margin-bottom: 2em;
+		}
+		.signing_container{
+			margin-bottom: 2em;
+		}
+		.signing-column-btn {
+			margin: 0.75em;
+			width: 200px !important;
+		}
+		.tx {
+			width: 100%;
+			max-width: 179px;
+			min-width: 120px;
+		}
+		.checkbox {
+			width: 20px;
+			height: 20px;
+		}
+		.tx_details_header {
+			text-align: left;
+			text-decoration: underline;
+		}
+		#tx_details {
+			line-height: 1.5;
+		}
+		.toggle{
+			display: none;
+		}
+		.togglebtn {
+			margin: auto;
+			display: inline-block;
+			text-align: center;
+			background: var(--cmap-border) !important;
+		}
+		input[type="checkbox"] ~ label.togglebtn::before{
+			content: "Show";
+		}
+		input[type="checkbox"]:checked ~ label.togglebtn::before{
+			content: "Hide";
+		}
+		input[type="checkbox"]{
+			display: none;
+		}
+		input[type="checkbox"]:checked ~ .toggle{
+			display: block;
+		}
+		@media screen and (max-width:720px) {
+			.tx {
+				width: 100%;
+				max-width: 179px;
+				min-width: 0px;
+			}
+        }
+	</div><!--</style>-->
+	<br>
+	{% from 'wallet/components/explorer_link.jinja' import explorer_link %}
+	<form action="{{ url_for(service.get_blueprint_name() + '.step4_post') }}?wallet={{wallet.alias}}" method="POST" class="full-width" id="send_sign_psbt_form" data-style="margin: auto; margin-top: 0px; max-width: 96%;">
+		<h2>Step 3: Sign Alert transaction for wallet {{ wallet.name }}</h2>
+		<p>
+			This transaction sends all funds to a self-address, and a tiny amount (600 sats) to each recipient/anchor address.
+		</p>
+		<input type="hidden" class="csrf-token" name="csrf_token" value="{{ csrf_token() }}"/>
+		<div class="tx_info">
+			{% for i in range(psbt['address']|length) %}
+				<div class="flex items-center flex-wrap whitespace-nowrap">
+					{% if "asset" in psbt %}
+						{{ _("Sending ") }} <b>&nbsp;{{ psbt["amount"][i] | btcamount }}&nbsp;</b> <asset-label data-asset="{{psbt['asset'][i]}}" data-label="{{psbt['asset'][i] | assetlabel}}"></asset-label>
+					{% else %}
+						{{ _("Sending ") }} <b>&nbsp;{{ psbt["amount"][i] | btcunitamount }}&nbsp;</b>
+						{% if specter.unit == 'sat' %}
+							sats
+						{% else %}
+							{% if specter.is_testnet %}t{%endif%}BTC
+						{% endif %}
+						{% if specter.price_check %}
+							({{ psbt["amount"][i] | altunit }})
+						{% endif %}
+					{% endif %}
+					{{ _(" to ") }}<b class="ml-2">
+						{% set addr_label = wallet.getlabel(psbt['address'][i]) %}
+						<address-label data-address="{{ psbt['address'][i] }}" data-label="{{ addr_label }}" data-wallet="{{ wallet.alias }}"></address-label>
+					</b>
+					{% if addr_label != psbt['address'][i] %}
+						<span class="note">
+							({{ psbt['address'][i] }})
+						</span>
+					{% endif %}<br><br>
+				</div>
+			{% endfor %}
+			{% if wallet.is_multisig %}
+				<div class="log mb-5" data-style="margin: auto;">
+					{{ _("Acquired") }} <b id="sigscount">{{ psbt['sigs_count'] }}</b> {{ _("of") }} <b>{{ wallet.sigs_required }}</b> {{ _("signatures") }}.
+				</div>
+			{% endif %}
+
+			<input hidden class="peer" type="checkbox" id="showdetails">
+			<label for="showdetails" class="mt-5 button togglebtn">
+				{{ _("Transaction Details") }}
+			</label>
+
+			<div class="hidden peer-checked:flex flex-col mt-8" id="tx_details">
+				<h2 class="tx_details_header">{{ _("Transaction Info") }}</h2>
+				<p>
+					<b>{{ _("Total fee:") }}</b> {{ psbt['fee'] | btc2sat }} sats {% if specter.price_check %}<span class="note">&nbsp;({{ psbt['fee'] | altunit }})</span>{% endif %}<br>
+					<b>{{ _("Fee rate:") }}</b>
+					{% if 'tx_full_size' in psbt %}
+						{{ (psbt['fee'] / psbt['tx_full_size']) | feerate }} sat/vbyte<br>
+						<b>{{ _("Estimated size:") }}</b> {{ psbt['tx_full_size'] }} vbytes<br>
+					{% else %}
+						{{ (psbt['fee'] / psbt['tx']['weight']) | feerate }} sat/vbyte<br>
+						<b>{{ _("Size:") }}</b> {{ psbt['tx']['vsize'] }} vbytes<br>
+					{% endif %}
+					<b>{{ _("Inputs count:") }}</b> {{ psbt['tx']['vin'] | length }}<br>
+					<b>{{ _("Outputs count:") }}</b> {{ psbt['tx']['vout'] | length }}
+				</p>
+
+				<h2 class="tx_details_header mt-5">{{ _("Inputs") }} ({{psbt['inputs'] | length}})</h2>
+				{% for input in psbt['inputs'] %}
+					{% set bg_color = '#131a24' %}
+					{% set address=input['address'] %}
+					{% set bg_color = '#925d07' if wallet.is_address_mine(address) else bg_color %}
+					<p class="tx_info">
+						<h3><b>Input #{{loop.index0}}</b></h3>
+						<div class="flex items-center space-x-2">
+							<b>{{ _("Transaction id:") }}</b>
+							<span>
+								{{ explorer_link('tx', input['txid'], input['txid'], specter.explorer) }} : {{ input['vout'] }}<br>
+								{% set addr_label = wallet.getlabel(address) %}
+							</span>
+						</div>
+						<div class="flex items-center space-x-2">
+							<b>{{ _("Address:") }}</b> <span>{{ address }}</span>
+						</div>
+						{% if addr_label != address %}
+							<div class="flex items-center space-x-2">
+								<b>{{ _("Label:") }}</b>
+								<address-label data-address="{{ address }}" data-label="{{ addr_label }}" data-wallet="{{ wallet.alias }}"></address-label>
+							</div>
+						{% endif %}
+						{% if specter.is_liquid %}
+							<div class="flex items-center space-x-2">
+								<b>{{ _("Amount:") }}&nbsp;</b> {{ input.get('float_amount') | btcamount }} <asset-label data-asset="{{input['asset']}}" data-label="{{input['asset'] | assetlabel}}"></asset-label>
+							</div>
+						{% else %}
+							<div class="flex items-center space-x-2">
+								<b>{{ _("Amount:") }}&nbsp;</b> {{ input.get('float_amount') | btcamount }} {% if input.get('float_amount') != None %} BTC {% endif %} {% if specter.price_check %} <span class="note">&nbsp;({{ input.get('float_amount') | altunit }})</span> {% endif %}
+							</div>
+						{% endif %}
+					</p>
+				{% endfor %}
+
+				<h2 class="tx_details_header mt-5">{{ _("Outputs") }} ({{psbt['outputs']|length}})</h2>
+				{% for output in psbt['outputs'] %}
+					{% set address = output['address'] %}
+					{% set bg_color = '#154984' if output['is_mine'] else '#131a24' %}
+					<p class="tx_info">
+						<h3>
+							<b>{{ _("Output") }} #{{loop.index0}}</b> {% if output['is_change'] %}(Change){% endif %}
+							{% set addr_label = wallet.getlabel(address) %}
+						</h3>
+						<div class="flex items-center space-x-2">
+							<b>{{ _("Address:") }}&nbsp;</b> {{ address }}
+						</div>
+						{% if addr_label != address %}
+							<div class="flex items-center space-x-2">
+								<b>{{ _("Label:") }}</b>
+								<address-label data-address="{{ address }}" data-label="{{ addr_label }}" data-wallet="{{ wallet.alias }}"></address-label>
+							</div>
+						{% endif %}
+						{% if specter.is_liquid %}
+							<div class="flex items-center space-x-2">
+								<b>{{ _("Amount:") }}&nbsp;</b> {{ output['float_amount']|btcamount }} <asset-label data-asset="{{output['asset']}}" data-label="{{output['asset'] | assetlabel}}"></asset-label>
+							</div>
+						{% else %}
+							<div class="flex items-center space-x-2">
+								<b>{{ _("Amount:") }}&nbsp;</b> {{ output['float_amount']|btcamount }} BTC {% if specter.price_check %}<span class="note">&nbsp;({{ output['float_amount'] | altunit }})</span>{% endif %}
+							</div>
+						{% endif %}
+					</p>
+				{% endfor %}
+
+
+				<h3 class="mt-5">{{ _("Raw PSBT:") }}</h3>
+				<textarea id="raw-psbt" disabled>{{ psbt['base64'] }}</textarea>
+				<div class="grid grid-cols-2 gap-3 mt-3">
+					<a id="download-psbt-btn" class="button m-0"
+					download="binary_{{ psbt['tx']['hash'] }}.psbt" href="data:application/octet-stream;base64;content-disposition=attachment,{{ psbt['base64'] }}">
+						<img src="{{ url_for('static', filename='img/file.svg') }}" data-style="width: 26px; margin: 0px;" class="svg-white">
+						{{ _("Save binary") }}
+					</a>
+					<a id="download-psbt-btn" class="button m-0"
+					download="base64_{{ psbt['tx']['hash'] }}.psbt" href="data:text/plain;content-disposition=attachment,{{ psbt['base64'] }}">
+						<img src="{{ url_for('static', filename='img/file.svg') }}" data-style="width: 26px; margin: 0px;" class="svg-white">
+						{{ _("Save base64") }}
+					</a>
+					<a id="copy-raw-psbt-btn" class="button m-0">
+						<img src="{{ url_for('static', filename='img/copy.svg') }}" data-style="width: 26px; margin: 0px;" class="svg-white">
+						{{ _("Copy Raw PSBT") }}
+					</a>
+					<a id="show-qr-psbt-btn" class="button m-0">
+						<img src="{{ url_for('static', filename='img/qr-code.svg') }}" data-style="width: 26px; margin: 0px;" class="svg-white">
+						{{ _("Show QR code") }}
+					</a>
+				</div>
+			</div>
+		</div>
+
+		<div id="signing_container" class="signing_container mt-8 flex-column {% if psbt['raw'] %}hidden{% endif %}">
+			<h3>{{ _("Sign Transaction") }}</h3>
+			<div class="mt-3 space-y-3">
+			{% for device in wallet.devices %}
+				{% if device.type != "bitcoincore_watchonly" %}
+					{% set device_signed = (device.alias in psbt.get("devices_signed")) %}
+					<button type="button" class="button signing-column-btn bg-accent" id="{{ device.alias }}_tx_sign_btn" {% if device_signed %} disabled {% endif %}>
+						{{ device.name }} {% if device.alias in psbt.get('devices_signed',[]) %} (&#10004;) {% endif %}
+					</button>
+				{% endif %}
+				{% if device.type == "bitcoincore_watchonly" %}
+					<p>{{ _("Cannot sign with a watchonly wallet") }}</p>
+				{% endif %}
+			{% endfor %}
+			</div>
+		</div>
+
+		{# ===================== Possible tx signers' outputs ===================== #}
+
+		<div id="ready_container" class="output_option {% if not psbt['raw'] %}hidden{% endif %}">
+			<p>{{ _("Transaction is ready to send") }} (&#10004;)</p>
+			<div class="output_option">
+				<a class="button bg-accent text-white" id="send_tx_btn">{{ _("Send Transaction") }}</a>
+			</div>
+		</div>
+
+		<div id="paste_signed" class="mt-3 output_option {% if psbt['raw'] %}hidden{% endif %}" data-style="margin-top:20px">
+			<button type="button" onclick="showPageOverlay('paste-tx-popup')" class="button centered" id="pastetx">{{ _("Paste signed transaction") }}</a>
+		</div>
+
+		<div class="hidden bg-dark-800 rounded-lg p-4" id="paste-tx-popup">
+			<div class="flex justify-between mb-2">
+					<h3 class="mb-0">{{ _("Paste signed transaction") }}</h3>
+					<p class="m-0 cursor-pointer" onclick="hidePageOverlay()" class="cursor-pointer">Close</p>
+			</div>
+			<textarea type="text" class="mt-2" id="paste-tx-text" placeholder="{{ _('Paste your transaction here') }}"></textarea>
+			<button class="mb-0 mt-2 button bg-accent text-white" type="button" onclick="currentSigningDevice = '';combine(document.getElementById('paste-tx-text').value);hidePageOverlay();document.getElementById('paste-tx-text').value='';">{{ _("Confirm") }}</button>
+		</div>
+
+		{% include 'includes/overlay/broadcast_tx.jinja' %}
+	</form>
+
+	<form id="raw-psbt-qr-container" class="flex-center flex-column hidden">
+		<input type="hidden" class="csrf-token" name="csrf_token" value="{{ csrf_token() }}"/>
+		<div class="row" data-style="min-height: 400px;">
+			<span data-style="margin: auto;" id="raw-psbt-qr-holder">
+				<qr-code id="raw-psbt-qr" class='center' value="{{ psbt['base64'] }}" width="400" scalable></qr-code>
+			</span>
+		</div>
+	</form>
+
+	<div class="progress-buttons-bar">
+		<div>
+			<a class="btn" href="{{ url_for(service.id+'_endpoint.step2')}}?wallet={{ wallet.alias }}">
+				👈 Back
+			</a>
+		</div>
+	</div>
+{% endblock %}
+
+
+{% block scripts %}
+	<script>
+		let currentSigningDevice = '';
+		let currentSigningDeviceAlias;
+		let psbt0 = "{{ psbt['base64'] }}";
+		let sigscount = parseInt("{{ psbt['sigs_count'] }}");
+		let raw = "{{psbt['raw']}}";
+
+		var copyrawPSBTbtn = document.getElementById("copy-raw-psbt-btn");
+		copyrawPSBTbtn.addEventListener("click", function() {
+			var raw_psbt = document.getElementById("raw-psbt");
+			copyText(raw_psbt.value, "Copied PSBT")
+		});
+		document.getElementById("show-qr-psbt-btn").addEventListener("click", 
+			(e)=>{
+                e.preventDefault();
+                showPageOverlay('raw-psbt-qr-container');
+		});
+		document.addEventListener("DOMContentLoaded", function(){
+			var sendTxBtn = document.getElementById("send_tx_btn");
+			sendTxBtn.addEventListener("click", function() {
+				showPageOverlay("tx_broadcast");
+			});
+
+			document.getElementById("broadcast_block_explorer_btn").addEventListener("click", async function(e) {
+				e.preventDefault();
+				document.getElementById("broadcast_local_btn").classList.add("hidden");
+				document.getElementById("broadcast_block_explorer_btn").classList.add("hidden");
+				document.getElementById("save_psbt_btn").classList.add("hidden");
+				document.getElementById("copy_final_tx_btn").classList.add("hidden");
+				document.getElementById("broadcast_blockstream_btn").classList.remove("hidden");
+				document.getElementById("broadcast_mempool_btn").classList.remove("hidden");
+				document.getElementById("broadcast_blockstream_tor_btn").classList.remove("hidden");
+				document.getElementById("broadcast_mempool_tor_btn").classList.remove("hidden");
+				document.getElementById("broadcast_options_btn").classList.remove("hidden");
+			});
+
+			document.getElementById("broadcast_options_btn").addEventListener("click", async function(e) {
+				e.preventDefault();
+				document.getElementById("broadcast_local_btn").classList.remove("hidden");
+				document.getElementById("broadcast_block_explorer_btn").classList.remove("hidden");
+				document.getElementById("save_psbt_btn").classList.remove("hidden");
+				document.getElementById("copy_final_tx_btn").classList.remove("hidden");
+				document.getElementById("broadcast_blockstream_btn").classList.add("hidden");
+				document.getElementById("broadcast_mempool_btn").classList.add("hidden");
+				document.getElementById("broadcast_blockstream_tor_btn").classList.add("hidden");
+				document.getElementById("broadcast_mempool_tor_btn").classList.add("hidden");
+				document.getElementById("broadcast_options_btn").classList.add("hidden");
+			});
+
+			document.getElementById("broadcast_local_btn").addEventListener("click", async function(e) {
+				e.preventDefault();
+				broadcastLocal(raw);
+			});
+
+			if ("{{ specter.chain }}" != "regtest") {
+				document.getElementById("broadcast_blockstream_btn").addEventListener("click", async function(e) {
+					e.preventDefault();
+					broadcastBlockExplorer(raw, 'blockstream', false);
+				});
+
+				document.getElementById("broadcast_mempool_btn").addEventListener("click", async function(e) {
+					e.preventDefault();
+					broadcastBlockExplorer(raw, 'mempool', false);
+				});
+
+				document.getElementById("broadcast_blockstream_tor_btn").addEventListener("click", async function(e) {
+					e.preventDefault();
+					broadcastBlockExplorer(raw, 'blockstream', true);
+				});
+
+				document.getElementById("broadcast_mempool_tor_btn").addEventListener("click", async function(e) {
+					e.preventDefault();
+					broadcastBlockExplorer(raw, 'mempool', true);
+				});
+			}
+
+			document.getElementById("save_psbt_btn").addEventListener("click", async function(e) {
+				e.preventDefault();
+				hidePageOverlay();
+				window.location.replace("{{ url_for('wallets_endpoint.send_pending',wallet_alias=wallet.alias) }}");
+			});
+
+			document.getElementById("copy_final_tx_btn").addEventListener("click", async function(e) {
+				e.preventDefault();
+				copyText(raw, 'Copied transaction')
+			});
+		});
+		if (!"{{ psbt['raw'] }}") {
+			document.addEventListener("DOMContentLoaded", function(){
+				{% if signed_psbt %}
+					combine('{{ signed_psbt }}')
+				{% endif %}
+			});
+		}
+
+		async function combine(psbt1) {
+			let url = "{{ url_for('wallets_endpoint_api.combine', wallet_alias=wallet.alias) }}";
+
+			var formData = new FormData();
+			formData.append("csrf_token", "{{ csrf_token() }}");
+			formData.append("psbt0", psbt0);
+			formData.append("psbt1", psbt1);
+			formData.append("txid", "{{ psbt['tx']['txid'] }}");
+			formData.append("device_name", currentSigningDevice);
+
+			try {
+				const response = await fetch(
+					url,
+					{
+						method: 'POST',
+						body: formData
+					}
+				);
+				if(response.status != 200){
+					showError(await response.text());
+					return;
+				}
+				const jsonResponse = await response.json();
+				if("psbt" in jsonResponse){
+					psbt0 = jsonResponse["psbt"];
+					if("devices" in jsonResponse){
+						jsonResponse["devices"].forEach(alias => {
+							let el = document.getElementById(alias + '_tx_sign_btn');
+							el.style = "background-color:#303c49;";
+							// if not disabled yet - disable
+							if(!el.disabled){
+								el.disabled = true;
+								el.innerHTML += ' (&#10004;)';
+							}
+						});
+						sigscount = jsonResponse["devices"].length;
+					}
+					let sigsel = document.getElementById("sigscount");
+					if(sigsel){
+						sigsel.innerHTML = sigscount;
+					}
+					// add signatures to raw-psbt textarea for export
+					document.getElementById("raw-psbt").value = psbt0;
+					// download file
+					document.getElementById("download-psbt-btn").href = "data:text/plain;content-disposition=attachment,"+psbt0;
+					// qr code
+					document.getElementById("raw-psbt-qr-holder").innerHTML = `            <qr-code id="raw-psbt-qr" class='center' value="${psbt0}" width="400" scalable></qr-code>`;
+					document.getElementById("raw-psbt-qr").setAttribute("value",psbt0);
+				}
+				console.log(jsonResponse);
+				if (jsonResponse.complete) {
+					let el = document.getElementById('broadcast_container');
+					if(el){
+						el.style.display = 'block';
+					}
+					raw = jsonResponse["hex"];
+					document.getElementById("signing_container").style.display = 'none';
+					document.getElementById("paste_signed").style.display = 'none';
+					document.getElementById("ready_container").style.display = 'block';
+					showPageOverlay("tx_broadcast");
+				}
+			} catch(e) {
+				console.log("Caught error: ", e);
+				showError(e);
+			}
+		}
+
+		async function broadcastLocal(tx) {
+			showNotification(`{{ _('Sending transaction...') }}`);
+			let url="{{ url_for('wallets_endpoint_api.broadcast', wallet_alias=wallet.alias) }}";
+
+			var formData = new FormData();
+			formData.append("csrf_token", "{{ csrf_token() }}");
+			formData.append("tx", tx);
+			const jsonResponse = await send_request(url, 'POST', "{{ csrf_token() }}", formData);
+			if (jsonResponse.success) {
+				hidePageOverlay();
+				window.location.replace("{{ url_for('wallets_endpoint.history', wallet_alias=wallet.alias) }}");
+			} else {
+				showError(`{{ _('Server failed to broadcast transactions!') }}\n` + jsonResponse.error);
+			}
+		}
+
+		async function broadcastBlockExplorer(tx, explorer, useTor) {
+			showNotification(`{{ _('Sending transaction...') }}`, 0);
+			let url = "{{ url_for('wallets_endpoint_api.broadcast_blockexplorer', wallet_alias=wallet.alias) }}";
+
+			var formData = new FormData();
+			formData.append("csrf_token", "{{ csrf_token() }}");
+			formData.append("tx", tx);
+			formData.append("explorer", explorer);
+			formData.append("use_tor", useTor);
+
+			const jsonResponse = await send_request(url, 'POST', "{{ csrf_token() }}", formData);
+
+			if (jsonResponse.success) {
+				hidePageOverlay();
+				window.location.replace("{{ url_for('wallets_endpoint.history', wallet_alias=wallet.alias) }}");
+			} else {
+				showError(`{{ _('Server failed to broadcast transactions!') }}\n` + jsonResponse.error);
+			}
+		}
+
+		// ================== Signers various device support ==================
+		{% if 'raw' not in psbt %}
+			document.addEventListener("DOMContentLoaded", function() {
+				{% for device in wallet.devices %}
+					document.getElementById("{{ device.alias }}_tx_sign_btn").addEventListener("click", (e) => {
+						e.preventDefault();
+						currentSigningDevice = "{{ device.name }}";
+						currentSigningDeviceAlias = "{{ device.alias }}";
+						showPageOverlay('{{ device.alias }}_sign_tx_method');
+					});
+				{% endfor %}
+			});
+		{% endif %}
+	</script>
+{% endblock %}

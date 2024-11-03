@@ -83,6 +83,32 @@ def step2():
         reserved_address=reserved_address,
     )
 
+@timelockrecovery_endpoint.route("/step3", methods=["POST"])
+@login_required
+def step3_post():
+    verify_not_liquid()
+    wallet_alias = request.args.get('wallet')
+    wallet: Wallet = current_user.wallet_manager.get_by_alias(wallet_alias)
+    if not wallet:
+        raise SpecterError(
+            "Wallet could not be loaded. Are you connected with Bitcoin Core?"
+        )
+    # update balances in the wallet
+    wallet.update_balance()
+    # update utxo list for coin selection
+    wallet.check_utxo()
+
+    return "ok"
+
+
+@timelockrecovery_endpoint.route("/step3", methods=["GET"])
+@login_required
+def step3_get():
+    wallet_alias = request.args.get('wallet')
+    if wallet_alias:
+        return redirect(url_for(f"{ TimelockrecoveryService.get_blueprint_name()}.step2") + f"?wallet={wallet_alias}")
+    return redirect(url_for(f"{ TimelockrecoveryService.get_blueprint_name()}.step1_get"))
+
 
 @timelockrecovery_endpoint.route("/transactions")
 @login_required
@@ -128,13 +154,25 @@ def settings_post():
         TimelockrecoveryService.set_associated_wallet(wallet)
     return redirect(url_for(f"{ TimelockrecoveryService.get_blueprint_name()}.settings_get"))
 
-@timelockrecovery_endpoint.route("/create_psbt/<wallet_alias>", methods=["POST"])
+@timelockrecovery_endpoint.route("/create_alert_psbt_recovery_vsize/<wallet_alias>", methods=["POST"])
 @login_required
-def create_psbt(wallet_alias):
+def create_alert_psbt_recovery_vsize(wallet_alias):
     wallet: Wallet = current_user.wallet_manager.get_by_alias(wallet_alias)
     psbt_creator = PsbtCreator(
-        app.specter, wallet, "json", request_json=request.json
+        app.specter, wallet, "json", request_json=request.json["alert_psbt_request_json"]
     )
     psbt_creator.kwargs["readonly"] = True
     psbt = psbt_creator.create_psbt(wallet)
-    return {"result": psbt}
+
+    raw_recovery_tx_hex = app.specter.rpc.createrawtransaction(
+        [{"txid": psbt["tx"]["txid"], "vout": 0}],
+        [{address: 0} for address in request.json["recovery_recipients"]],
+        0,
+        True
+    )
+    raw_recovery_tx_size = len(raw_recovery_tx_hex) / 2
+    return {
+        "psbt": psbt,
+        "recovery_transaction_vsize": raw_recovery_tx_size + (psbt_creator.psbt_as_object.extra_input_weight + 3) / 4.
+    }
+
