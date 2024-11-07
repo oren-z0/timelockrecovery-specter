@@ -147,6 +147,7 @@
 		// 0xFFFF * 512 seconds = 388.36 days.
 		const maxLocktimeDatys = 388;
 
+		let alertPsbtRequestJson = undefined;
 		let recoveryTransactionVSize = undefined;
 		let alertPsbt = undefined;
 		let isSimulatingAlertTransaction = false;
@@ -157,11 +158,10 @@
 			const asyncTracker = simulateAlertTransactionAsyncTracker;
 			isSimulatingAlertTransaction = true;
 			try {
-				const feeSelectionComponent = document.getElementById('main-transaction-fee-selection-component');
-				const selectedFee = feeSelectionComponent.selectedFee();
 				document.getElementById('alert-psbt-success').classList.add('hidden');
 				document.getElementById('alert-psbt-creation-fail').classList.add('hidden');
 				document.getElementById('alert-psbt-api-fail').classList.add('hidden');
+				alertPsbtRequestJson = undefined;
 				recoveryTransactionVSize = undefined;
 				alertPsbt = undefined;
 				simulateRecoveryTransaction();
@@ -169,13 +169,36 @@
 				if (asyncTracker !== simulateAlertTransactionAsyncTracker) {
 					return;
 				}
-				if (selectedFee === "") {
-					return;
-				}
 				const recipientList = [...document.querySelectorAll('#recipients > recipient-box')];
 				if (recipientList.length === 0 || recipientList.some((r) => !validateAddress(r.address))) {
 					return;
 				}
+				const feeSelectionComponent = document.getElementById('main-transaction-fee-selection-component');
+				const selectedFee = feeSelectionComponent.selectedFee();
+				if (selectedFee === "") {
+					return;
+				}
+				alertPsbtRequestJson = {
+					recipients: [
+						{
+							address: "{{ reserved_address.address }}",
+							amount: (Math.round(Number(amountAvailable) * 1e8) - anchorOutputAmountSats * recipientList.length) / 1e8,
+							unit: "btc",
+							label: "{{ reserved_address.label }}"
+						},
+						...recipientList.map(({ address, label }) => ({
+							address,
+							amount: anchorOutputAmountSats / 1e8,
+							unit: "btc",
+							label,
+						})),
+					],
+					rbf_tx_id: "",
+					subtract: true,
+					subtract_from: 0,
+					fee_rate: selectedFee,
+					rbf: feeSelectionComponent.rbfOption.checked,
+				};
 				const fetchResult = await fetch(
 					`{{ url_for(service.id + "_endpoint.create_alert_psbt_recovery_vsize", wallet_alias=wallet.alias) }}`,
 					{
@@ -187,27 +210,7 @@
 							'x-csrftoken': "{{ csrf_token() }}",
 						},
 						body: JSON.stringify({
-							alert_psbt_request_json: {
-								recipients: [
-									{
-										address: "{{ reserved_address.address }}",
-										amount: (Math.round(Number(amountAvailable) * 1e8) - anchorOutputAmountSats * recipientList.length) / 1e8,
-										unit: "btc",
-										label: "{{ reserved_address.label }}"
-									},
-									...recipientList.map(({ address, label }) => ({
-										address,
-										amount: anchorOutputAmountSats / 1e8,
-										unit: "btc",
-										label,
-									})),
-								],
-								rbf_tx_id: "",
-								subtract: true,
-								subtract_from: 0,
-								fee_rate: selectedFee,
-								rbf: feeSelectionComponent.rbfOption.checked,
-							},
+							alert_psbt_request_json: alertPsbtRequestJson,
 							recovery_recipients: recipientList.map(({ address }) => address),
 						}),
 					},
@@ -460,7 +463,7 @@
 				}
 				recipientIndex += 1;
 			}
-			if (!alertPsbt) {
+			if (!alertPsbtRequestJson || !alertPsbt) {
 				showError("Failed to create PSBT for Alert transaction", 5000);
 				return;
 			}
@@ -482,7 +485,7 @@
 			}
 			const recoveryTransactionFeeSelectionComponent = getRecoveryTransactionFeeSelectionComponent();
 			document.getElementById('next-form-data').value = JSON.stringify({
-				alert_psbt: alertPsbt,
+				alert_psbt_request_json: alertPsbtRequestJson,
 				recovery_recipients: recipientList.map((r) => ({[r.address]: r.amount / (r.unit === 'btc' ? 1 : 1e8)})),
 				timelock_days: timelockDays,
 			});

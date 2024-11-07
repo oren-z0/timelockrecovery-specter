@@ -1,4 +1,5 @@
 {% extends "timelockrecovery/components/timelockrecovery_tab.jinja" %}
+{% block title %}Step 3{% endblock %}
 {% set tab = 'index' %}
 
 {% block content %}
@@ -6,9 +7,9 @@
 	{% include "includes/qr-scanner.html" %}
 
 	{% include "includes/hwi/hwi.jinja" %}
-	{% from 'includes/overlay/sign_tx_method.jinja' import sign_tx_method %}
+	{% from 'timelockrecovery/includes/overlay/timelockrecovery_sign_tx_method.jinja' import sign_tx_method %}
 	{% for device in wallet.devices %}
-		{{ sign_tx_method(wallet, device, psbt, specter.info.chain) }}
+		{{ sign_tx_method(service, request_data, wallet, device, psbt, specter.info.chain) }}
 	{% endfor %}
 	<div style="display: none;"><!--<style>-->
 		.tx_info {
@@ -243,10 +244,7 @@
 		{# ===================== Possible tx signers' outputs ===================== #}
 
 		<div id="ready_container" class="output_option {% if not psbt['raw'] %}hidden{% endif %}">
-			<p>{{ _("Transaction is ready to send") }} (&#10004;)</p>
-			<div class="output_option">
-				<a class="button bg-accent text-white" id="send_tx_btn">{{ _("Send Transaction") }}</a>
-			</div>
+			<p>{{ _("Transaction is ready") }} (&#10004;)</p>
 		</div>
 
 		<div id="paste_signed" class="mt-3 output_option {% if psbt['raw'] %}hidden{% endif %}" data-style="margin-top:20px">
@@ -261,8 +259,6 @@
 			<textarea type="text" class="mt-2" id="paste-tx-text" placeholder="{{ _('Paste your transaction here') }}"></textarea>
 			<button class="mb-0 mt-2 button bg-accent text-white" type="button" onclick="currentSigningDevice = '';combine(document.getElementById('paste-tx-text').value);hidePageOverlay();document.getElementById('paste-tx-text').value='';">{{ _("Confirm") }}</button>
 		</div>
-
-		{% include 'includes/overlay/broadcast_tx.jinja' %}
 	</form>
 
 	<form id="raw-psbt-qr-container" class="flex-center flex-column hidden">
@@ -274,10 +270,22 @@
 		</div>
 	</form>
 
+	<form id="next-form" action="{{ url_for(service.get_blueprint_name() + '.step4_post') }}?wallet={{wallet.alias}}" method="POST" role="form">
+		<input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+		<input type="hidden" name="request_data" value='{{ request_data|tojson|safe }}' />
+		<input type="hidden" name="alert_psbt" value='{{ psbt|tojson|safe }}' />
+		<input id="alert-raw" type="hidden" name="alert_raw" value="" />
+	</form>
+
 	<div class="progress-buttons-bar">
 		<div>
 			<a class="btn" href="{{ url_for(service.id+'_endpoint.step2')}}?wallet={{ wallet.alias }}">
 				👈 Back
+			</a>
+		</div>
+		<div>
+			<a class="btn" href="#" id="next-button">
+				Next 👉
 			</a>
 		</div>
 	</div>
@@ -297,80 +305,19 @@
 			var raw_psbt = document.getElementById("raw-psbt");
 			copyText(raw_psbt.value, "Copied PSBT")
 		});
-		document.getElementById("show-qr-psbt-btn").addEventListener("click", 
+		document.getElementById("show-qr-psbt-btn").addEventListener("click",
 			(e)=>{
                 e.preventDefault();
                 showPageOverlay('raw-psbt-qr-container');
 		});
-		document.addEventListener("DOMContentLoaded", function(){
-			var sendTxBtn = document.getElementById("send_tx_btn");
-			sendTxBtn.addEventListener("click", function() {
-				showPageOverlay("tx_broadcast");
-			});
-
-			document.getElementById("broadcast_block_explorer_btn").addEventListener("click", async function(e) {
-				e.preventDefault();
-				document.getElementById("broadcast_local_btn").classList.add("hidden");
-				document.getElementById("broadcast_block_explorer_btn").classList.add("hidden");
-				document.getElementById("save_psbt_btn").classList.add("hidden");
-				document.getElementById("copy_final_tx_btn").classList.add("hidden");
-				document.getElementById("broadcast_blockstream_btn").classList.remove("hidden");
-				document.getElementById("broadcast_mempool_btn").classList.remove("hidden");
-				document.getElementById("broadcast_blockstream_tor_btn").classList.remove("hidden");
-				document.getElementById("broadcast_mempool_tor_btn").classList.remove("hidden");
-				document.getElementById("broadcast_options_btn").classList.remove("hidden");
-			});
-
-			document.getElementById("broadcast_options_btn").addEventListener("click", async function(e) {
-				e.preventDefault();
-				document.getElementById("broadcast_local_btn").classList.remove("hidden");
-				document.getElementById("broadcast_block_explorer_btn").classList.remove("hidden");
-				document.getElementById("save_psbt_btn").classList.remove("hidden");
-				document.getElementById("copy_final_tx_btn").classList.remove("hidden");
-				document.getElementById("broadcast_blockstream_btn").classList.add("hidden");
-				document.getElementById("broadcast_mempool_btn").classList.add("hidden");
-				document.getElementById("broadcast_blockstream_tor_btn").classList.add("hidden");
-				document.getElementById("broadcast_mempool_tor_btn").classList.add("hidden");
-				document.getElementById("broadcast_options_btn").classList.add("hidden");
-			});
-
-			document.getElementById("broadcast_local_btn").addEventListener("click", async function(e) {
-				e.preventDefault();
-				broadcastLocal(raw);
-			});
-
-			if ("{{ specter.chain }}" != "regtest") {
-				document.getElementById("broadcast_blockstream_btn").addEventListener("click", async function(e) {
-					e.preventDefault();
-					broadcastBlockExplorer(raw, 'blockstream', false);
-				});
-
-				document.getElementById("broadcast_mempool_btn").addEventListener("click", async function(e) {
-					e.preventDefault();
-					broadcastBlockExplorer(raw, 'mempool', false);
-				});
-
-				document.getElementById("broadcast_blockstream_tor_btn").addEventListener("click", async function(e) {
-					e.preventDefault();
-					broadcastBlockExplorer(raw, 'blockstream', true);
-				});
-
-				document.getElementById("broadcast_mempool_tor_btn").addEventListener("click", async function(e) {
-					e.preventDefault();
-					broadcastBlockExplorer(raw, 'mempool', true);
-				});
+		document.getElementById("next-button").addEventListener("click", (e) => {
+			e.preventDefault();
+			if (!raw) {
+				showError("Must sign the transaction first");
+				return;
 			}
-
-			document.getElementById("save_psbt_btn").addEventListener("click", async function(e) {
-				e.preventDefault();
-				hidePageOverlay();
-				window.location.replace("{{ url_for('wallets_endpoint.send_pending',wallet_alias=wallet.alias) }}");
-			});
-
-			document.getElementById("copy_final_tx_btn").addEventListener("click", async function(e) {
-				e.preventDefault();
-				copyText(raw, 'Copied transaction')
-			});
+			document.getElementById('alert-raw').value = raw;
+			document.getElementById('next-form').submit();
 		});
 		if (!"{{ psbt['raw'] }}") {
 			document.addEventListener("DOMContentLoaded", function(){
@@ -381,8 +328,6 @@
 		}
 
 		async function combine(psbt1) {
-			let url = "{{ url_for('wallets_endpoint_api.combine', wallet_alias=wallet.alias) }}";
-
 			var formData = new FormData();
 			formData.append("csrf_token", "{{ csrf_token() }}");
 			formData.append("psbt0", psbt0);
@@ -392,7 +337,7 @@
 
 			try {
 				const response = await fetch(
-					url,
+					"{{ url_for('wallets_endpoint_api.combine', wallet_alias=wallet.alias) }}",
 					{
 						method: 'POST',
 						body: formData
@@ -429,57 +374,31 @@
 					document.getElementById("raw-psbt-qr-holder").innerHTML = `            <qr-code id="raw-psbt-qr" class='center' value="${psbt0}" width="400" scalable></qr-code>`;
 					document.getElementById("raw-psbt-qr").setAttribute("value",psbt0);
 				}
-				console.log(jsonResponse);
 				if (jsonResponse.complete) {
-					let el = document.getElementById('broadcast_container');
-					if(el){
-						el.style.display = 'block';
+					const deleteResponse = await fetch(
+						"{{ url_for(service.get_blueprint_name() + '.delete_psbt', wallet_alias=wallet.alias, txid=psbt['tx']['txid']) }}",
+						{
+							method: 'POST',
+							headers: {
+								'accept': 'application/json',
+								'content-type': 'application/json',
+								'x-csrftoken': "{{ csrf_token() }}",
+							},
+							body: JSON.stringify({}),
+						}
+					);
+					if (deleteResponse.status !== 200){
+						showError(await deleteResponse.text());
+						return;
 					}
 					raw = jsonResponse["hex"];
 					document.getElementById("signing_container").style.display = 'none';
 					document.getElementById("paste_signed").style.display = 'none';
 					document.getElementById("ready_container").style.display = 'block';
-					showPageOverlay("tx_broadcast");
 				}
 			} catch(e) {
 				console.log("Caught error: ", e);
 				showError(e);
-			}
-		}
-
-		async function broadcastLocal(tx) {
-			showNotification(`{{ _('Sending transaction...') }}`);
-			let url="{{ url_for('wallets_endpoint_api.broadcast', wallet_alias=wallet.alias) }}";
-
-			var formData = new FormData();
-			formData.append("csrf_token", "{{ csrf_token() }}");
-			formData.append("tx", tx);
-			const jsonResponse = await send_request(url, 'POST', "{{ csrf_token() }}", formData);
-			if (jsonResponse.success) {
-				hidePageOverlay();
-				window.location.replace("{{ url_for('wallets_endpoint.history', wallet_alias=wallet.alias) }}");
-			} else {
-				showError(`{{ _('Server failed to broadcast transactions!') }}\n` + jsonResponse.error);
-			}
-		}
-
-		async function broadcastBlockExplorer(tx, explorer, useTor) {
-			showNotification(`{{ _('Sending transaction...') }}`, 0);
-			let url = "{{ url_for('wallets_endpoint_api.broadcast_blockexplorer', wallet_alias=wallet.alias) }}";
-
-			var formData = new FormData();
-			formData.append("csrf_token", "{{ csrf_token() }}");
-			formData.append("tx", tx);
-			formData.append("explorer", explorer);
-			formData.append("use_tor", useTor);
-
-			const jsonResponse = await send_request(url, 'POST', "{{ csrf_token() }}", formData);
-
-			if (jsonResponse.success) {
-				hidePageOverlay();
-				window.location.replace("{{ url_for('wallets_endpoint.history', wallet_alias=wallet.alias) }}");
-			} else {
-				showError(`{{ _('Server failed to broadcast transactions!') }}\n` + jsonResponse.error);
 			}
 		}
 
