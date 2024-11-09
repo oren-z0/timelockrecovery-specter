@@ -6,7 +6,7 @@
     - psbt: The psbt to be signed.
     - specter: The active chain 
  #}
-{% macro sign_tx_method(service, request_data, wallet, device, psbt, chain) -%}
+{% macro sign_tx_method(action_url, request_data, wallet, device, psbt, chain) -%}
     {% set device_psbts = device.create_psbts(psbt['base64'], wallet) %}
     <div id="{{ device.alias }}_sign_tx_method" class="p-4 bg-dark-800 rounded-lg flex-column hidden">
         <div class="flex justify-between mb-2">
@@ -101,7 +101,7 @@
                         <p class="m-0 cursor-pointer" onclick="hidePageOverlay()" class="cursor-pointer">Close</p>
                     </div>
 
-                    <form action="{{ url_for(service.get_blueprint_name() + '.step3_post') }}?wallet={{wallet.alias}}" method="POST" id="hot_enter_passphrase__content" class="flex-center flex-column">
+                    <form action="{{ action_url }}?wallet={{wallet.alias}}" method="POST" id="hot_enter_passphrase__content" class="flex-center flex-column">
                         <input type="hidden" class="csrf-token" name="csrf_token" value="{{ csrf_token() }}"/>
                         <div>
                             {% if is_encrypted %}

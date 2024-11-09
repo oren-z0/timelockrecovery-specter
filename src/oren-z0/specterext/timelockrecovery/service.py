@@ -1,11 +1,15 @@
+from base64 import b64decode
+import json
 import logging
 
 from cryptoadvance.specter.services.service import Service, devstatus_alpha, devstatus_prod, devstatus_beta
 # A SpecterError can be raised and will be shown to the user as a red banner
-from cryptoadvance.specter.specter_error import SpecterError
-from flask import current_app as app
+from cryptoadvance.specter.specter_error import SpecterError, handle_exception
+from flask import current_app as app, flash
+from flask_babel import lazy_gettext as _
 from cryptoadvance.specter.wallet import Wallet
 from flask_apscheduler import APScheduler
+from embit.psbt import PSBT
 
 logger = logging.getLogger(__name__)
 
@@ -85,3 +89,41 @@ class TimelockrecoveryService(Service):
             address_found = not addr_obj.used and not addr_obj.is_reserved
         wallet.associate_address_with_service(address=addr, service_id=cls.id, label=f"Address #{index} - Timelock Recovery Alert Address")
         return addr_obj
+
+    @classmethod
+    def add_prev_tx_to_psbt(cls, psbt_base64, prev_tx, input_index=0, utxo_index=0):
+        psbt = PSBT.from_base64(psbt_base64)
+        psbt.inputs[input_index].witness_utxo = prev_tx.vout[utxo_index]
+        return psbt
+
+    @classmethod
+    def signhotwallet(cls, request_form, wallet):
+        passphrase = request_form["passphrase"]
+        psbt = json.loads(request_form["psbt"])
+        current_psbt = wallet.PSBTCls(
+            psbt["base64"],
+            wallet.descriptor,
+            wallet.network,
+            devices=list(zip(wallet.keys, wallet._devices)),
+        )
+        b64psbt = str(current_psbt)
+        device = request_form["device"]
+        if "devices_signed" not in psbt or device not in psbt["devices_signed"]:
+            try:
+                # get device and sign with it
+                signed_psbt = app.specter.device_manager.get_by_alias(
+                    device
+                ).sign_psbt(b64psbt, wallet, passphrase)
+                raw = None
+                if signed_psbt["complete"]:
+                    raw = wallet.rpc.finalizepsbt(b64psbt)
+                current_psbt.update(signed_psbt["psbt"], raw)
+                signed_psbt = signed_psbt["psbt"]
+                return current_psbt.to_dict(), signed_psbt
+            except Exception as e:
+                handle_exception(e)
+                flash(_("Failed to sign PSBT: {}").format(e), "error")
+                return psbt, None
+        else:
+            flash(_("Device already signed the PSBT"), "error")
+            return psbt, None

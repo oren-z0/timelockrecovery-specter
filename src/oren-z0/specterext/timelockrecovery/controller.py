@@ -6,6 +6,7 @@ from flask import redirect, render_template, request, url_for, flash, abort
 from flask import current_app as app
 from flask_login import login_required, current_user
 from flask_babel import lazy_gettext as _
+from embit.transaction import Transaction
 
 from cryptoadvance.specter.specter import Specter
 from cryptoadvance.specter.services.controller import user_secret_decrypted_required
@@ -106,12 +107,13 @@ def step3_post():
     wallet.check_utxo()
 
     action = request.form.get("action")
+    request_data = json.loads(request.form["request_data"])
 
     if action == "prepare":
-        request_data = json.loads(request.form["data"])
         psbt_creator = PsbtCreator(
             app.specter, wallet, "json", request_json=request_data["alert_psbt_request_json"]
         )
+        psbt_creator.kwargs["readonly"] = True
         psbt = psbt_creator.create_psbt(wallet)
 
         return render_template(
@@ -123,36 +125,7 @@ def step3_post():
             rand=rand,
         )
     if action == "signhotwallet":
-        request_data = json.loads(request.form["request_data"])
-        passphrase = request.form["passphrase"]
-        psbt = json.loads(request.form["psbt"])
-        current_psbt = wallet.PSBTCls(
-            psbt["base64"],
-            wallet.descriptor,
-            wallet.network,
-            devices=list(zip(wallet.keys, wallet._devices)),
-        )
-        b64psbt = str(current_psbt)
-        device = request.form["device"]
-        if "devices_signed" not in psbt or device not in psbt["devices_signed"]:
-            try:
-                # get device and sign with it
-                signed_psbt = app.specter.device_manager.get_by_alias(
-                    device
-                ).sign_psbt(b64psbt, wallet, passphrase)
-                raw = None
-                if signed_psbt["complete"]:
-                    raw = wallet.rpc.finalizepsbt(b64psbt)
-                current_psbt.update(signed_psbt["psbt"], raw)
-                signed_psbt = signed_psbt["psbt"]
-                psbt = current_psbt.to_dict()
-            except Exception as e:
-                handle_exception(e)
-                signed_psbt = None
-                flash(_("Failed to sign PSBT: {}").format(e), "error")
-        else:
-            signed_psbt = None
-            flash(_("Device already signed the PSBT"), "error")
+        psbt, signed_psbt = TimelockrecoveryService.signhotwallet(request.form, wallet)
         return render_template(
             "timelockrecovery/step3.jinja",
             request_data=request_data,
@@ -183,11 +156,50 @@ def step4_post():
         raise SpecterError(
             "Wallet could not be loaded. Are you connected with Bitcoin Core?"
         )
-    # update balances in the wallet
-    wallet.update_balance()
-    # update utxo list for coin selection
-    wallet.check_utxo()
-    return "<pre style=\"font-size: 2rem;\">hi \n" + json.dumps(json.loads(request.form["request_data"]), indent=2).replace('<', '&lt;') + "\n" + json.dumps(json.loads(request.form["alert_psbt"]), indent=2).replace('<', '&lt;') + "\n" + request.form["alert_raw"] + "</pre>"
+
+    action = request.form.get("action")
+    request_data = json.loads(request.form["request_data"])
+
+    if action == "prepare":
+        alert_tx = Transaction.from_string(request.form["alert_raw"])
+
+        sequence = round((request_data["timelock_days"] * 24 * 60 - (11 * 10 / 2)) * 60 / 512)
+
+        recovery_psbt = app.specter.rpc.createpsbt(
+            [{"txid": alert_tx.txid().hex(), "vout": 0, "sequence": sequence}],
+            request_data["recovery_recipients"],
+        )
+
+        recovery_psbt_base64 = TimelockrecoveryService.add_prev_tx_to_psbt(recovery_psbt, alert_tx).to_base64()
+        recovery_psbt = wallet.PSBTCls(
+            recovery_psbt_base64,
+            wallet.descriptor,
+            wallet.network,
+            devices=list(zip(wallet.keys, wallet._devices)),
+        )
+
+        request_data["alert_raw"] = request.form["alert_raw"]
+
+        return render_template(
+            "timelockrecovery/step4.jinja",
+            request_data=request_data,
+            psbt=recovery_psbt.to_dict(),
+            wallet=wallet,
+            specter=app.specter,
+            rand=rand,
+        )
+    if action == "signhotwallet":
+        psbt, signed_psbt = TimelockrecoveryService.signhotwallet(request.form, wallet)
+        return render_template(
+            "timelockrecovery/step4.jinja",
+            request_data=request_data,
+            signed_psbt=signed_psbt,
+            psbt=psbt,
+            wallet=wallet,
+            specter=app.specter,
+            rand=rand,
+        )
+    raise SpecterError("Unexpected action")
 
 @timelockrecovery_endpoint.route("/step4", methods=["GET"])
 @login_required
@@ -196,6 +208,18 @@ def step4_get():
     if wallet_alias:
         return redirect(url_for(f"{ TimelockrecoveryService.get_blueprint_name()}.step2") + f"?wallet={wallet_alias}")
     return redirect(url_for(f"{ TimelockrecoveryService.get_blueprint_name()}.step1_get"))
+
+@timelockrecovery_endpoint.route("/step5", methods=["POST"])
+@login_required
+def step5_post():
+    verify_not_liquid()
+    wallet_alias = request.args.get('wallet')
+    wallet: Wallet = current_user.wallet_manager.get_by_alias(wallet_alias)
+    if not wallet:
+        raise SpecterError(
+            "Wallet could not be loaded. Are you connected with Bitcoin Core?"
+        )
+    return "<pre style=\"font-size: 2rem;\">hi\nrequest_data: " + json.dumps(json.loads(request.form["request_data"]), indent=2).replace('<', '&lt;') + "\nrecovery_raw: " + request.form["recovery_raw"] + "</pre>"
 
 
 @timelockrecovery_endpoint.route("/transactions")
@@ -268,13 +292,64 @@ def create_alert_psbt_recovery_vsize(wallet_alias):
         "recovery_transaction_vsize": raw_recovery_tx_size + (psbt_creator.psbt_as_object.extra_input_weight + 3) / 4.
     }
 
-@timelockrecovery_endpoint.route("/delete_psbt/<wallet_alias>/<txid>", methods=["POST"])
+@timelockrecovery_endpoint.route("/combine_nonpending_psbt/<wallet_alias>", methods=["POST"])
 @login_required
-def delete_psbt(wallet_alias, txid):
-    wallet: Wallet = current_user.wallet_manager.get_by_alias(wallet_alias)
-    if not wallet:
-        raise SpecterError(
-            "Wallet could not be loaded. Are you connected with Bitcoin Core?"
-        )
-    wallet.delete_pending_psbt(txid)
-    return {}
+def combine_nonpending_psbt(wallet_alias):
+    wallet: Wallet = app.specter.wallet_manager.get_by_alias(wallet_alias)
+    # only post requests
+    # FIXME: ugly...
+    psbts = [request.form.get("psbt0").strip(), request.form.get("psbt1").strip()]
+    raw = {}
+    combined = None
+
+    for i, psbt in enumerate(psbts):
+        if not psbt:
+            return _("Cannot parse empty data as PSBT"), 500
+        if "UR:BYTES/" in psbt.upper():
+            psbt = bcur2base64(psbt).decode()
+
+        # if electrum then it's base43
+        try:
+            decoded = b43_decode(psbt)
+            if decoded[:5] in [b"psbt\xff", b"pset\xff"]:
+                psbt = b2a_base64(decoded).decode()
+            else:
+                psbt = decoded.hex()
+        except:
+            pass
+
+        psbts[i] = psbt
+        # psbt should start with cHNi
+        # if not - maybe finalized hex tx
+        if not psbt.startswith("cHNi") and not psbt.startswith("cHNl"):
+            raw["hex"] = psbt
+            combined = psbts[1 - i]
+            # check it's hex
+            try:
+                bytes.fromhex(psbt)
+            except:
+                return _("Invalid transaction format"), 500
+
+    try:
+        if "hex" in raw:
+            raw["complete"] = True
+            raw["psbt"] = combined
+        else:
+            combined = app.specter.combine(psbts)
+            raw = app.specter.finalize(combined)
+            if "psbt" not in raw:
+                raw["psbt"] = combined
+        # PSBT is not in wallet.pending_psbts
+        psbt = wallet.PSBTCls(
+            combined,
+            wallet.descriptor,
+            wallet.network,
+            devices=list(zip(wallet.keys, wallet._devices)),
+        ).to_dict()
+        raw["devices"] = psbt["devices_signed"]
+    except RpcError as e:
+        return e.error_msg, e.status_code
+    except Exception as e:
+        handle_exception(e)
+        return _("Unknown error: {}").format(e), 500
+    return json.dumps(raw)

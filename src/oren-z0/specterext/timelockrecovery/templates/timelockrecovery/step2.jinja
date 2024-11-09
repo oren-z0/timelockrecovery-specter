@@ -133,7 +133,7 @@
 	<form id="next-form" action="{{ url_for(service.get_blueprint_name() + '.step3_post') }}?wallet={{wallet.alias}}" method="POST" role="form">
 		<input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
 		<input type="hidden" name="action" value="prepare" />
-		<input id="next-form-data" type="hidden" name="data" value="" />
+		<input id="next-form-data" type="hidden" name="request_data" value="" />
 	</form>
 {% endblock %}
 

@@ -1,5 +1,5 @@
 {% extends "timelockrecovery/components/timelockrecovery_tab.jinja" %}
-{% block title %}Step 3{% endblock %}
+{% block title %}Step 4{% endblock %}
 {% set tab = 'index' %}
 
 {% block content %}
@@ -9,7 +9,7 @@
 	{% include "includes/hwi/hwi.jinja" %}
 	{% from 'timelockrecovery/includes/overlay/timelockrecovery_sign_tx_method.jinja' import sign_tx_method %}
 	{% for device in wallet.devices %}
-		{{ sign_tx_method(url_for(service.get_blueprint_name() + '.step3_post'), request_data, wallet, device, psbt, specter.info.chain) }}
+		{{ sign_tx_method(url_for(service.get_blueprint_name() + '.step4_post'), request_data, wallet, device, psbt, specter.info.chain) }}
 	{% endfor %}
 	<div style="display: none;"><!--<style>-->
 		.tx_info {
@@ -73,10 +73,11 @@
 	</div><!--</style>-->
 	<br>
 	{% from 'wallet/components/explorer_link.jinja' import explorer_link %}
-	<form action="{{ url_for(service.get_blueprint_name() + '.step4_post') }}?wallet={{wallet.alias}}" method="POST" class="full-width" id="send_sign_psbt_form" data-style="margin: auto; margin-top: 0px; max-width: 96%;">
-		<h2>Step 3: Sign Alert transaction for wallet {{ wallet.name }}</h2>
+	<form action="{{ url_for(service.get_blueprint_name() + '.step5_post') }}?wallet={{wallet.alias}}" method="POST" class="full-width" id="send_sign_psbt_form" data-style="margin: auto; margin-top: 0px; max-width: 96%;">
+		<h2>Step 4: Sign Recovery transaction for wallet {{ wallet.name }}</h2>
 		<p>
-			This transaction sends all funds to a self-address, and a tiny amount (600 sats) to each recipient/anchor address.
+			This transaction sends all funds to a the recovery addresses that you selected, but can be sent to the
+			blockchain only {{ request_data["timelock_days"] }} days after the Alert transaction.
 		</p>
 		<input type="hidden" class="csrf-token" name="csrf_token" value="{{ csrf_token() }}"/>
 		<div class="tx_info">
@@ -270,12 +271,11 @@
 		</div>
 	</form>
 
-	<form id="next-form" action="{{ url_for(service.get_blueprint_name() + '.step4_post') }}?wallet={{wallet.alias}}" method="POST" role="form">
+	<form id="next-form" action="{{ url_for(service.get_blueprint_name() + '.step5_post') }}?wallet={{wallet.alias}}" method="POST" role="form">
 		<input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
 		<input type="hidden" name="request_data" value='{{ request_data|tojson|safe }}' />
-		<input type="hidden" name="alert_psbt" value='{{ psbt|tojson|safe }}' />
+		<input id="recovery-raw" type="hidden" name="recovery_raw" value="" />
 		<input type="hidden" name="action" value="prepare" />
-		<input id="alert-raw" type="hidden" name="alert_raw" value="" />
 	</form>
 
 	<div class="progress-buttons-bar">
@@ -317,7 +317,7 @@
 				showError("Must sign the transaction first");
 				return;
 			}
-			document.getElementById('alert-raw').value = raw;
+			document.getElementById('recovery-raw').value = raw;
 			document.getElementById('next-form').submit();
 		});
 		if (!"{{ psbt['raw'] }}") {
@@ -372,11 +372,11 @@
 					// download file
 					document.getElementById("download-psbt-btn").href = "data:text/plain;content-disposition=attachment,"+psbt0;
 					// qr code
-					document.getElementById("raw-psbt-qr-holder").innerHTML = `<qr-code id="raw-psbt-qr" class='center' value="${psbt0}" width="400" scalable></qr-code>`;
-					document.getElementById("raw-psbt-qr").setAttribute("value", psbt0);
+					document.getElementById("raw-psbt-qr-holder").innerHTML = `            <qr-code id="raw-psbt-qr" class='center' value="${psbt0}" width="400" scalable></qr-code>`;
+					document.getElementById("raw-psbt-qr").setAttribute("value",psbt0);
 				}
 				if (jsonResponse.complete) {
- 					raw = jsonResponse["hex"];
+					raw = jsonResponse["hex"];
 					document.getElementById("signing_container").style.display = 'none';
 					document.getElementById("paste_signed").style.display = 'none';
 					document.getElementById("ready_container").style.display = 'block';
