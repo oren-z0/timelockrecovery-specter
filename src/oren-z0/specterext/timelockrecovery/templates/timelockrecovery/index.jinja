@@ -12,7 +12,7 @@
             Nobody else can access your funds.
             <br />
             But what if you lose your master keys? If you die in an accident - how could
-            loved-ones receive the funds?
+            your loved-ones receive the funds?
             <br />
             Some wallets handle this issue with complicated multisig solutions, where your
             inheritors and a 3rd-party service hold keys that together can access your funds.
@@ -20,13 +20,14 @@
             which could be an immediate security risk if those clues are exopsed.
             <br />
             Using <span class="italic">Bitcoin Relative Timelocks</span>, this extension
-            will create recovery plan - a sequence of two signed-transactions, which you can print and
+            will create recovery plan - a sequence of two signed-in-advance transactions, which you can print and
             give to your loved-ones to be broadcasted in case something happens to you
             (another option is to store in a less-cryptic location than your master keys).
             The transactions operate in the following way:
             <ol class="same-font-size">
                 <li>
-                    The first transaction of the two keeps the funds in your wallet, but makes it
+                    The first transaction of the the two, which is called the <span class="italic">Alert Transaction</span>,
+                    keeps the funds in your wallet, but makes it
                     possible to broadcast the second transaction after a predefined time-window
                     of your choosing (i.e. 90 days).
                     During this time, you can "cancel" the process by sending the funds elsewhere
@@ -36,25 +37,23 @@
                     accessing the master keys during a crisis might be complicated, i.e. multisigs).
                 </li>
                 <li>
-                    Eventually, if the process has not been cancelled, broadcasting the second
-                    transaction will send the funds to specific addresses that you decided in advance,
-                    i.e. to your inheritors wallets or some backup wallet.
-                    A malicious user that found the signed-transactions could not change the funds'
-                    destination.
+                    Eventually, if the process has not been cancelled during the time-window, your inheritors
+                    (or future self) could broadcast the second transaction - which is called the
+                    <span class="italic">Recovery Transaction</span>.
+                    This transaction will send the funds to specific addresses that you decided in advance,
+                    i.e. to your inheritors' wallets or some backup wallet.
                 </li>
                 <li>
                     When the process of transfering the funds begins, the first transaction
                     will be saved on the blockchain, but the funds will still remain in your wallet.
                     This will allow you to periodically (i.e. once a week) check block-explorers (i.e.
                     <a target="_blank" href="https://mempool.space" rel="noopener noreferrer">
-                        mempool.space
-                    </a>,
+                        mempool.space</a>,
                     <a target="_blank" href="https://blockstream.info" rel="noopener noreferrer">
-                        blockstream.info
-                    </a>) whether that transaction has entered the blockchain, giving you
+                        blockstream.info</a>) whether that transaction has entered the blockchain, giving you
                     enough time to cancel the process (act before the second transaction is
                     broadcasted).
-                    You could also use 3rd-party WatchTower services to alert you if this happens.
+                    You could also use 3rd-party Watch-Tower services to alert you if this happens.
                 </li>
             </ol>
             For more technical details about how the process works, see here (TODO: link to online
