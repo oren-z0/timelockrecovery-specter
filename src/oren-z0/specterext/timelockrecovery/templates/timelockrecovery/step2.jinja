@@ -21,14 +21,14 @@
 			</p>
 
 			{% if wallet.amount_locked_unsigned  > 0 or wallet.amount_frozen > 0 %}
-				<div>
-					<tool-tip width="150px">
-							<h4 slot="title">{{ _("Why is this less than my total balance?") }}</h4>
-							<span slot="paragraph">
-							{{ _(' Frozen outputs and outputs locked in unsigned transactions are not available here.
-							To make more funds available, click on the "Unsigned" tab and delete not required transactions or unfreeze UTXO under "Transactions".') }}
-							</span>
-					</tool-tip>
+				<div class="warning">
+					<h4 slot="title">{{ _("Why is this less than my total balance?") }}</h4>
+					<span slot="paragraph">
+					{{ _(' Frozen outputs and outputs locked in unsigned transactions are not available here.') }}
+					{{ _('To make more funds available, go to the wallet\'s pending transactions') }}
+					(<a class="text-link" href="{{ url_for('wallets_endpoint.send_pending',wallet_alias=wallet.alias) }}">{{ _('here') }}</a>),
+					{{ _('and remove the unwanted pending transactions, or unfreeze the UTXOs in the wallet Transactions tab.') }}
+					</span>
 				</div>
 			{% endif %}
 

@@ -11,69 +11,8 @@
 	{% for device in wallet.devices %}
 		{{ sign_tx_method(url_for(service.get_blueprint_name() + '.step3_post'), request_data, wallet, device, psbt, specter.info.chain) }}
 	{% endfor %}
-	<div style="display: none;"><!--<style>-->
-		.tx_info {
-			padding: 1em;
-			border: 1px solid #506072;
-			border-radius: 4px;
-			text-align: center;
-			margin-bottom: 2em;
-		}
-		.signing_container{
-			margin-bottom: 2em;
-		}
-		.signing-column-btn {
-			margin: 0.75em;
-			width: 200px !important;
-		}
-		.tx {
-			width: 100%;
-			max-width: 179px;
-			min-width: 120px;
-		}
-		.checkbox {
-			width: 20px;
-			height: 20px;
-		}
-		.tx_details_header {
-			text-align: left;
-			text-decoration: underline;
-		}
-		#tx_details {
-			line-height: 1.5;
-		}
-		.toggle{
-			display: none;
-		}
-		.togglebtn {
-			margin: auto;
-			display: inline-block;
-			text-align: center;
-			background: var(--cmap-border) !important;
-		}
-		input[type="checkbox"] ~ label.togglebtn::before{
-			content: "Show";
-		}
-		input[type="checkbox"]:checked ~ label.togglebtn::before{
-			content: "Hide";
-		}
-		input[type="checkbox"]{
-			display: none;
-		}
-		input[type="checkbox"]:checked ~ .toggle{
-			display: block;
-		}
-		@media screen and (max-width:720px) {
-			.tx {
-				width: 100%;
-				max-width: 179px;
-				min-width: 0px;
-			}
-        }
-	</div><!--</style>-->
-	<br>
 	{% from 'wallet/components/explorer_link.jinja' import explorer_link %}
-	<form action="{{ url_for(service.get_blueprint_name() + '.step4_post') }}?wallet={{wallet.alias}}" method="POST" class="full-width" id="send_sign_psbt_form" data-style="margin: auto; margin-top: 0px; max-width: 96%;">
+	<div class="full-width">
 		<h2>Step 3: Sign Alert transaction for wallet {{ wallet.name }}</h2>
 		<p>
 			This transaction sends all funds to a self-address, and a tiny amount (600 sats) to each recipient/anchor address.
@@ -138,7 +77,7 @@
 					{% set bg_color = '#131a24' %}
 					{% set address=input['address'] %}
 					{% set bg_color = '#925d07' if wallet.is_address_mine(address) else bg_color %}
-					<p class="tx_info">
+					<div class="tx_info">
 						<h3><b>Input #{{loop.index0}}</b></h3>
 						<div class="flex items-center space-x-2">
 							<b>{{ _("Transaction id:") }}</b>
@@ -165,14 +104,14 @@
 								<b>{{ _("Amount:") }}&nbsp;</b> {{ input.get('float_amount') | btcamount }} {% if input.get('float_amount') != None %} BTC {% endif %} {% if specter.price_check %} <span class="note">&nbsp;({{ input.get('float_amount') | altunit }})</span> {% endif %}
 							</div>
 						{% endif %}
-					</p>
+					</div>
 				{% endfor %}
 
 				<h2 class="tx_details_header mt-5">{{ _("Outputs") }} ({{psbt['outputs']|length}})</h2>
 				{% for output in psbt['outputs'] %}
 					{% set address = output['address'] %}
 					{% set bg_color = '#154984' if output['is_mine'] else '#131a24' %}
-					<p class="tx_info">
+					<div class="tx_info">
 						<h3>
 							<b>{{ _("Output") }} #{{loop.index0}}</b> {% if output['is_change'] %}(Change){% endif %}
 							{% set addr_label = wallet.getlabel(address) %}
@@ -195,7 +134,7 @@
 								<b>{{ _("Amount:") }}&nbsp;</b> {{ output['float_amount']|btcamount }} BTC {% if specter.price_check %}<span class="note">&nbsp;({{ output['float_amount'] | altunit }})</span>{% endif %}
 							</div>
 						{% endif %}
-					</p>
+					</div>
 				{% endfor %}
 
 
@@ -259,7 +198,7 @@
 			<textarea type="text" class="mt-2" id="paste-tx-text" placeholder="{{ _('Paste your transaction here') }}"></textarea>
 			<button class="mb-0 mt-2 button bg-accent text-white" type="button" onclick="currentSigningDevice = '';combine(document.getElementById('paste-tx-text').value);hidePageOverlay();document.getElementById('paste-tx-text').value='';">{{ _("Confirm") }}</button>
 		</div>
-	</form>
+	</div>
 
 	<form id="raw-psbt-qr-container" class="flex-center flex-column hidden">
 		<input type="hidden" class="csrf-token" name="csrf_token" value="{{ csrf_token() }}"/>
@@ -376,7 +315,7 @@
 					document.getElementById("raw-psbt-qr").setAttribute("value", psbt0);
 				}
 				if (jsonResponse.complete) {
- 					raw = jsonResponse["hex"];
+					raw = jsonResponse["hex"];
 					document.getElementById("signing_container").style.display = 'none';
 					document.getElementById("paste_signed").style.display = 'none';
 					document.getElementById("ready_container").style.display = 'block';

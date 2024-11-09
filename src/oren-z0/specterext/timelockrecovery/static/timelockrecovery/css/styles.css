@@ -74,3 +74,62 @@
 .box-shadow-xl {
     background-color: rgb(0, 0, 0, 0.8);
 }
+
+.tx_info {
+    padding: 1em;
+    border: 1px solid #506072;
+    border-radius: 4px;
+    text-align: center;
+    margin-bottom: 2em;
+}
+
+.tx_info .signing_container{
+    margin-bottom: 2em;
+}
+
+.tx_info .signing-column-btn {
+    margin: 0.75em;
+    width: 200px !important;
+}
+
+.tx_info .tx {
+    width: 100%;
+    max-width: 179px;
+    min-width: 120px;
+}
+
+.tx_info .tx_details_header {
+    text-align: left;
+    text-decoration: underline;
+}
+
+#tx_details {
+    line-height: 1.5;
+}
+
+.toggle {
+    display: none;
+}
+
+.tx_info .togglebtn {
+    margin: auto;
+    display: inline-block;
+    text-align: center;
+    background: var(--cmap-border) !important;
+}
+
+.tx_info input[type="checkbox"] ~ label.togglebtn::before{
+    content: "Show";
+}
+
+.tx_info input[type="checkbox"]:checked ~ label.togglebtn::before{
+    content: "Hide";
+}
+
+.tx_info input[type="checkbox"]{
+    display: none;
+}
+
+.tx_info input[type="checkbox"]:checked ~ .toggle{
+    display: block;
+}
