@@ -18,7 +18,6 @@
 			This transaction sends all funds to a the recovery addresses that you selected, but can be sent to the
 			blockchain only {{ request_data["timelock_days"] }} days after the Alert transaction.
 		</p>
-		<input type="hidden" class="csrf-token" name="csrf_token" value="{{ csrf_token() }}"/>
 		<div class="tx_info">
 			{% for i in range(psbt['address']|length) %}
 				<div class="flex items-center flex-wrap whitespace-nowrap">

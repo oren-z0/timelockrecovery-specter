@@ -17,7 +17,6 @@
 		<p>
 			This transaction sends all funds to a self-address, and a tiny amount (600 sats) to each recipient/anchor address.
 		</p>
-		<input type="hidden" class="csrf-token" name="csrf_token" value="{{ csrf_token() }}"/>
 		<div class="tx_info">
 			{% for i in range(psbt['address']|length) %}
 				<div class="flex items-center flex-wrap whitespace-nowrap">
