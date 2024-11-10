@@ -83,7 +83,7 @@
 				+ Add Recipient
 			</div>
 
-			<div id="not-enough-funds" class="warning hidden">
+			<div id="not-enough-funds-for-recovery" class="warning hidden">
 				Not enough funds left for last recipient.
 			</div>
 		</div>
@@ -95,13 +95,23 @@
 
 		<label class="checkbox-wrapper-inline">
             <input type="checkbox" class="checkbox-input" id="multiple-fees">
-            <span class="checkbox-label">Select different fee rates for each transaction</span>
+            <span class="checkbox-label">Select different fee-rate for each transaction</span>
         </label>
 
         <div class="hidden" id="recovery-transaction-fee-selection-wrapepr">
             <h3 class="mt-5">Recovery Transaction - {{ _("Fee Selection") }}</h3>
             <timelockrecovery-fee-selection id="recovery-transaction-fee-selection-component" rbf-enabled="false"></timelockrecovery-fee-selection>
         </div>
+
+        <div class="hidden" id="cancellation-transaction-fee-selection-wrapepr">
+            <h3 class="mt-5">Optional: Cancellation Transaction - {{ _("Fee Selection") }}</h3>
+            <timelockrecovery-fee-selection id="cancellation-transaction-fee-selection-component" rbf-enabled="false"></timelockrecovery-fee-selection>
+        </div>
+
+		<div id="not-enough-funds-for-cancellation" class="warning hidden">
+			Not enough funds left for cancellation transaction.
+			The recovered funds will be less than 600 sats.
+		</div>
 
 		<div>
             <h3 class="mt-5">Timelock</h3>
@@ -149,6 +159,8 @@
 
 		let alertPsbtRequestJson = undefined;
 		let recoveryTransactionVSize = undefined;
+		let cancellationTransactionVSize = undefined;
+		let cancellationLeftoverSats = 0;
 		let alertPsbt = undefined;
 		let isSimulatingAlertTransaction = false;
 
@@ -163,8 +175,10 @@
 				document.getElementById('alert-psbt-api-fail').classList.add('hidden');
 				alertPsbtRequestJson = undefined;
 				recoveryTransactionVSize = undefined;
+				cancellationTransactionVSize = undefined;
+				cancellationLeftoverSats = 0;
 				alertPsbt = undefined;
-				simulateRecoveryTransaction();
+				simulateSecondaryTransactions();
 				await new Promise((resolve) => setTimeout(resolve, 400));
 				if (asyncTracker !== simulateAlertTransactionAsyncTracker) {
 					return;
@@ -218,7 +232,7 @@
 				if (!fetchResult.ok) {
 					throw new Error("Fetch result not ok");
 				}
-				const { psbt, recovery_transaction_vsize, error } = await fetchResult.json();
+				const { psbt, recovery_transaction_vsize, cancellation_transaction_vsize, error } = await fetchResult.json();
 				if (error) {
 					console.error("Fetch call responded with an error", error);
 					if (asyncTracker === simulateAlertTransactionAsyncTracker) {
@@ -230,8 +244,9 @@
 						document.getElementById('available-funds-after-alert').textContent = specterUnit === 'sats' ? `${psbt.outputs[0].sat_amount} sats` : `${psbt.outputs[0].float_amount} ${specterUnit}`;
 						document.getElementById(`alert-psbt-success`).classList.remove('hidden');
 						recoveryTransactionVSize = recovery_transaction_vsize;
+						cancellationTransactionVSize = cancellation_transaction_vsize;
 						alertPsbt = psbt;
-						simulateRecoveryTransaction();
+						simulateSecondaryTransactions();
 					}
 				}
 			} catch (err) {
@@ -254,31 +269,47 @@
 			);
 		}
 
-		function simulateRecoveryTransaction() {
-			document.getElementById('not-enough-funds').classList.add('hidden');
+		function getCancellationTransactionFeeSelectionComponent() {
+			return document.getElementById(
+				document.getElementById('multiple-fees').checked
+					? 'cancellation-transaction-fee-selection-component'
+					: 'main-transaction-fee-selection-component',
+			)
+		}
+
+		function simulateSecondaryTransactions() {
+			document.getElementById('not-enough-funds-for-recovery').classList.add('hidden');
+			document.getElementById('not-enough-funds-for-cancellation').classList.add('hidden');
 			const recipientList = [...document.querySelectorAll('#recipients > recipient-box')];
 			if (recipientList.length === 0) {
 				return;
 			}
 			const [lastRecipient] = recipientList.slice(-1);
 			lastRecipient.amount = "";
-			const selectedFee = getRecoveryTransactionFeeSelectionComponent().selectedFee();
+			const recoveryFee = getRecoveryTransactionFeeSelectionComponent().selectedFee();
+			const cancellationFee = getCancellationTransactionFeeSelectionComponent().selectedFee();
 			const firstRecipientSats = recipientList.slice(0, -1).map((r) => r.amount * (r.unit === 'btc' ? 1e8 : 1))
 			if (
-				selectedFee === "" ||
+				recoveryFee === "" ||
+				cancellationFee === "" ||
 				recoveryTransactionVSize === undefined ||
+				cancellationTransactionVSize === undefined ||
 				alertPsbt == undefined ||
 				recipientList.some((r) => !validateAddress(r.address)) ||
 				firstRecipientSats.some((recipientSats) => Number.isNaN(recipientSats) || recipientSats < 0)
 			) {
 				return;
 			}
-			const leftoverSats = Math.round(alertPsbt.outputs[0].sat_amount - firstRecipientSats.reduce((soFar, s) => soFar + s, 0) - selectedFee * recoveryTransactionVSize);
-			if (leftoverSats < 0) {
-				document.getElementById('not-enough-funds').classList.remove('hidden');
-				return;
+			const recoveryLeftoverSats = Math.round(alertPsbt.outputs[0].sat_amount - firstRecipientSats.reduce((soFar, s) => soFar + s, 0) - recoveryFee * recoveryTransactionVSize);
+			cancellationLeftoverSats = Math.round(alertPsbt.outputs[0].sat_amount - cancellationFee * cancellationTransactionVSize);
+			if (0 < recoveryLeftoverSats) {
+				lastRecipient.amount = (lastRecipient.unit === 'btc') ? recoveryLeftoverSats / 1e8 : recoveryLeftoverSats;
+			} else {
+				document.getElementById('not-enough-funds-for-recovery').classList.remove('hidden');
 			}
-			lastRecipient.amount = (lastRecipient.unit === 'btc') ? leftoverSats / 1e8 : leftoverSats;
+			if (cancellationLeftoverSats < anchorOutputAmountSats) {
+				document.getElementById('not-enough-funds-for-cancellation').classList.remove('hidden');
+			}
 		}
 
 		function psbtFailReason(error) {
@@ -376,10 +407,10 @@
 				simulateAlertTransaction();
 			});
 			newRecipient.amountElement.addEventListener('input', () => {
-				simulateRecoveryTransaction();
+				simulateSecondaryTransactions();
 			});
 			newRecipient.addEventListener('unit-change', (event) => {
-				simulateRecoveryTransaction();
+				simulateSecondaryTransactions();
 			});
 
 			document.getElementById('recipients').appendChild(newRecipient);
@@ -402,9 +433,11 @@
 		function toggleMultipleFees(event) {
 			if (event.target.checked) {
 					document.getElementById('recovery-transaction-fee-selection-wrapepr').classList.remove('hidden');
+					document.getElementById('cancellation-transaction-fee-selection-wrapepr').classList.remove('hidden');
 					document.getElementById('alert-transaction-fee-label').classList.remove('hidden');
 				} else {
 					document.getElementById('recovery-transaction-fee-selection-wrapepr').classList.add('hidden');
+					document.getElementById('cancellation-transaction-fee-selection-wrapepr').classList.add('hidden');
 					document.getElementById('alert-transaction-fee-label').classList.add('hidden');
 				}
 				simulateAlertTransaction();
@@ -418,9 +451,12 @@
 				showError("Select fee for Alert transaction", 5000);
 				return;
 			}
-
 			if (getRecoveryTransactionFeeSelectionComponent().selectedFee() === "") {
 				showError("Select fee for Recovery transaction", 5000);
+				return;
+			}
+			if (getCancellationTransactionFeeSelectionComponent().selectedFee() === "") {
+				showError("Select fee for Cancellation transaction", 5000);
 				return;
 			}
 			const recipientList = [...document.querySelectorAll('#recipients > recipient-box')];
@@ -435,24 +471,16 @@
 			recipientIndex = 0;
 			for (const recipient of recipientList) {
 				if (Number.isNaN(recipient.amount) || recipient.amount < 0) {
-					if (recipientIndex < recipientList.length - 1) {
-						showError(
-							`Recipient ${recipientIndex}'s amount is less than ${
-								anchorOutputAmountSats
-							} sats (${anchorOutputAmountSats / 1e8} BTC). A transaction with such small output might be rejected by the network in the future.`,
-							10_000,
-						);
+					if (recipientList.length <= 1) {
+						showError("Failed to calculate the leftover amount for the recipient. Is the fee-rate too high?", 5000);
 						return;
-					} else if (recipientList.length <= 1) {
-						showError("Failed to calculate the leftover amount for the last recipient.", 5000);
-						return;
-					} else {
+					} else if (recipientIndex === recipientList.length - 1) {
 						showError("Failed to calculate the leftover amount for the last recipient. Did you give too much to the previous recipients?", 5000);
 						return;
 					}
 				}
 				const amountSats = recipient.amount * (recipient.unit === 'btc' ? 1e8 : 1);
-				if (amountSats < anchorOutputAmountSats) {
+				if (Number.isNaN(amountSats) || (amountSats < anchorOutputAmountSats)) {
 					showError(
 						`Recipient ${recipientIndex}'s amount is less than ${
 							anchorOutputAmountSats
@@ -483,11 +511,16 @@
 				showError(`Timelock days must be an integer between 1 and ${maxLocktimeDatys}`, 5000);
 				return;
 			}
+			if (cancellationLeftoverSats < anchorOutputAmountSats) {
+				showError("Not enough funds for Cancellation transaction", 5000);
+				return;
+			}
 			const recoveryTransactionFeeSelectionComponent = getRecoveryTransactionFeeSelectionComponent();
 			document.getElementById('next-form-data').value = JSON.stringify({
 				alert_psbt_request_json: alertPsbtRequestJson,
 				recovery_recipients: recipientList.map((r) => ({[r.address]: r.amount / (r.unit === 'btc' ? 1 : 1e8)})),
 				timelock_days: timelockDays,
+				cancellation_sats: cancellationLeftoverSats,
 			});
 			document.getElementById('next-form').submit();
 		}
@@ -508,7 +541,8 @@
 			addRecipient('', '', 'btc', '');
 			updateRecipientElementsByPosition();
 			document.getElementById('main-transaction-fee-selection-component').addEventListener('change', simulateAlertTransaction);
-			document.getElementById('recovery-transaction-fee-selection-component').addEventListener('change', simulateRecoveryTransaction);
+			document.getElementById('recovery-transaction-fee-selection-component').addEventListener('change', simulateSecondaryTransactions);
+			document.getElementById('cancellation-transaction-fee-selection-component').addEventListener('change', simulateSecondaryTransactions);
 			document.getElementById('add-recipient').onclick = () => addRecipient('', '', 'btc', '');
 			document.getElementById('multiple-fees').addEventListener('input', toggleMultipleFees);
 			document.getElementById('next-button').onclick = submitForm;

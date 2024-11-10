@@ -32,6 +32,11 @@ class TimelockrecoveryService(Service):
     # Those will end up as keys in a json-file
     SPECTER_WALLET_ALIAS = "wallet"
 
+    reserved_address_names = [
+        "Timelock Recovery Alert Address",
+        "Timelock Recovery Cancellation Address"
+    ]
+
     def callback_after_serverpy_init_app(self, scheduler: APScheduler):
         def every5seconds(hello, world="world"):
             with scheduler.app.app_context():
@@ -76,19 +81,19 @@ class TimelockrecoveryService(Service):
         cls.update_current_user_service_data({cls.SPECTER_WALLET_ALIAS: wallet.alias})
 
     @classmethod
-    def get_or_reserve_address(cls, wallet: Wallet):
+    def get_or_reserve_addresses(cls, wallet: Wallet):
         addresses = wallet.get_associated_addresses(cls.id)
-        if addresses:
-            return addresses[0]
+        left_names = list(cls.reserved_address_names)[len(addresses):]
         index = wallet.address_index
-        address_found = False
-        while not address_found:
-            index += 1
+        while left_names:
+            index += 1 # Also skip first address, is it may have been given to someone.
             addr = wallet.get_address(index)
             addr_obj = wallet.get_address_obj(addr)
-            address_found = not addr_obj.used and not addr_obj.is_reserved
-        wallet.associate_address_with_service(address=addr, service_id=cls.id, label=f"Address #{index} - Timelock Recovery Alert Address")
-        return addr_obj
+            if addr_obj.used or addr_obj.is_reserved:
+                continue
+            wallet.associate_address_with_service(address=addr, service_id=cls.id, label=f"Address #{index} - {left_names.pop(0)}")
+            addresses.append(addr_obj)
+        return addresses
 
     @classmethod
     def add_prev_tx_to_psbt(cls, psbt_base64, prev_tx, input_index=0, utxo_index=0):

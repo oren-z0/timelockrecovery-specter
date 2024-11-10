@@ -133,3 +133,11 @@
 .tx_info input[type="checkbox"]:checked ~ .toggle{
     display: block;
 }
+
+.checkbox-wrapper-long-label {
+    align-items: start;
+}
+
+.checkbox-wrapper-long-label input {
+    margin-top: 0.3rem;
+}

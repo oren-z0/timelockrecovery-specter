@@ -81,7 +81,7 @@ def step2():
     # update utxo list for coin selection
     wallet.check_utxo()
 
-    reserved_address = TimelockrecoveryService.get_or_reserve_address(wallet)
+    reserved_address = TimelockrecoveryService.get_or_reserve_addresses(wallet)[0]
 
     return render_template(
         "timelockrecovery/step2.jinja",
@@ -175,7 +175,7 @@ def step4_post():
             recovery_psbt_base64,
             wallet.descriptor,
             wallet.network,
-            devices=list(zip(wallet.keys, wallet._devices)),
+            devices=list(zip(wallet.keys, wallet.devices)),
         )
 
         request_data["alert_raw"] = request.form["alert_raw"]
@@ -219,7 +219,70 @@ def step5_post():
         raise SpecterError(
             "Wallet could not be loaded. Are you connected with Bitcoin Core?"
         )
-    return "<pre style=\"font-size: 2rem;\">hi\nrequest_data: " + json.dumps(json.loads(request.form["request_data"]), indent=2).replace('<', '&lt;') + "\nrecovery_raw: " + request.form["recovery_raw"] + "</pre>"
+
+    action = request.form.get("action")
+    request_data = json.loads(request.form["request_data"])
+
+    if action == "prepare":
+        alert_tx = Transaction.from_string(request_data["alert_raw"])
+
+        cancellation_address = TimelockrecoveryService.get_or_reserve_addresses(wallet)[1].address
+
+        cancellation_psbt = app.specter.rpc.createpsbt(
+            [{"txid": alert_tx.txid().hex(), "vout": 0, "sequence": 0xfffffffd}],
+            [{cancellation_address: request_data['cancellation_sats'] / 1e8}],
+        )
+
+        cancellation_psbt_base64 = TimelockrecoveryService.add_prev_tx_to_psbt(cancellation_psbt, alert_tx).to_base64()
+        cancellation_psbt = wallet.PSBTCls(
+            cancellation_psbt_base64,
+            wallet.descriptor,
+            wallet.network,
+            devices=list(zip(wallet.keys, wallet.devices)),
+        )
+
+        request_data["recovery_raw"] = request.form["recovery_raw"]
+
+        return render_template(
+            "timelockrecovery/step5.jinja",
+            request_data=request_data,
+            psbt=cancellation_psbt.to_dict(),
+            wallet=wallet,
+            specter=app.specter,
+            rand=rand,
+        )
+    if action == "signhotwallet":
+        psbt, signed_psbt = TimelockrecoveryService.signhotwallet(request.form, wallet)
+        return render_template(
+            "timelockrecovery/step5.jinja",
+            request_data=request_data,
+            signed_psbt=signed_psbt,
+            psbt=psbt,
+            wallet=wallet,
+            specter=app.specter,
+            rand=rand,
+        )
+    raise SpecterError("Unexpected action")
+
+@timelockrecovery_endpoint.route("/step5", methods=["GET"])
+@login_required
+def step5_get():
+    wallet_alias = request.args.get('wallet')
+    if wallet_alias:
+        return redirect(url_for(f"{ TimelockrecoveryService.get_blueprint_name()}.step2") + f"?wallet={wallet_alias}")
+    return redirect(url_for(f"{ TimelockrecoveryService.get_blueprint_name()}.step1_get"))
+
+@timelockrecovery_endpoint.route("/step6", methods=["POST"])
+@login_required
+def step6_post():
+    verify_not_liquid()
+    wallet_alias = request.args.get('wallet')
+    wallet: Wallet = current_user.wallet_manager.get_by_alias(wallet_alias)
+    if not wallet:
+        raise SpecterError(
+            "Wallet could not be loaded. Are you connected with Bitcoin Core?"
+        )
+    return "<pre style=\"font-size: 2rem;\">hi\nrequest_data: " + json.dumps(json.loads(request.form["request_data"]), indent=2).replace('<', '&lt;') + "\ncancellation_raw: " + request.form.get("cancellation_raw", "") + "</pre>"
 
 
 @timelockrecovery_endpoint.route("/transactions")
@@ -279,6 +342,7 @@ def create_alert_psbt_recovery_vsize(wallet_alias):
     )
     psbt_creator.kwargs["readonly"] = True
     psbt = psbt_creator.create_psbt(wallet)
+    single_input_extra_vsize = (psbt_creator.psbt_as_object.extra_input_weight + 3) / 4
 
     raw_recovery_tx_hex = app.specter.rpc.createrawtransaction(
         [{"txid": psbt["tx"]["txid"], "vout": 0}],
@@ -287,9 +351,20 @@ def create_alert_psbt_recovery_vsize(wallet_alias):
         True
     )
     raw_recovery_tx_size = len(raw_recovery_tx_hex) / 2
+
+    cancellation_address = TimelockrecoveryService.get_or_reserve_addresses(wallet)[1].address
+    raw_cancellation_tx_hex = app.specter.rpc.createrawtransaction(
+        [{"txid": psbt["tx"]["txid"], "vout": 0}],
+        [{cancellation_address: 0}],
+        0,
+        True
+    )
+    raw_cancellation_tx_size = len(raw_cancellation_tx_hex) / 2
+
     return {
         "psbt": psbt,
-        "recovery_transaction_vsize": raw_recovery_tx_size + (psbt_creator.psbt_as_object.extra_input_weight + 3) / 4.
+        "recovery_transaction_vsize": raw_recovery_tx_size + single_input_extra_vsize,
+        "cancellation_transaction_vsize": raw_cancellation_tx_size + single_input_extra_vsize,
     }
 
 @timelockrecovery_endpoint.route("/combine_nonpending_psbt/<wallet_alias>", methods=["POST"])
@@ -344,7 +419,7 @@ def combine_nonpending_psbt(wallet_alias):
             combined,
             wallet.descriptor,
             wallet.network,
-            devices=list(zip(wallet.keys, wallet._devices)),
+            devices=list(zip(wallet.keys, wallet.devices)),
         ).to_dict()
         raw["devices"] = psbt["devices_signed"]
     except RpcError as e:
