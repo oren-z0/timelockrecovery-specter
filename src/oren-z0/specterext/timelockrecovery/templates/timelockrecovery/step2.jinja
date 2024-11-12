@@ -507,8 +507,8 @@
 				}
 			}
 			const timelockDays = Number(document.getElementById('timelock-days').value);
-			if (Number.isNaN(timelockDays) || !Number.isSafeInteger(timelockDays) || timelockDays < 1 || timelockDays > maxLocktimeDatys) {
-				showError(`Timelock days must be an integer between 1 and ${maxLocktimeDatys}`, 5000);
+			if (Number.isNaN(timelockDays) || !Number.isSafeInteger(timelockDays) || timelockDays < 2 || timelockDays > maxLocktimeDatys) {
+				showError(`Timelock days must be an integer between 2 and ${maxLocktimeDatys}`, 5000);
 				return;
 			}
 			if (cancellationLeftoverSats < anchorOutputAmountSats) {

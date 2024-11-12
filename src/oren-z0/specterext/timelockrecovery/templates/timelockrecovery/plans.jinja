@@ -1,0 +1,532 @@
+{% extends "timelockrecovery/components/timelockrecovery_tab.jinja" %}
+{% block title %}Recovery Plans{% endblock %}
+{% set tab = 'plans' %}
+{% block content %}
+    <qr-code value='' width="400" id="qr-code-generator" class="hidden"></qr-code>
+    <div class="card">
+        <h2>Saved Recovery Plans</h2>
+        <h3 id="no-plans" class="hidden">No recovery plans were found.</h3>
+        <div id="plans-table" class="hidden">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Creation Time</th>
+                        <th>Wallet Name</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for plan in plans %}
+                    <tr id="row-{{ plan['id'] }}">
+                        <td>{{ plan["created_at"] }}</td>
+                        <td>{{ plan.get("wallet_name", plan["wallet_alias"]) }}</td>
+                        <td>
+                            <button class="download-recovery-button btn bg-dark-600" data-planid="{{ plan['id'] }}" >
+                                Download Recovery Guide
+                            </button>
+                            <button class="download-cancellation-button btn bg-dark-600" data-planid="{{ plan['id'] }}" >
+                                Download Cancellation Guide
+                            </button>
+                            <button class="delete-button btn bg-red-600" data-planid="{{ plan['id'] }}" >
+                                Delete
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <div>
+                Recovery plans could still be broadcasted to the blockchain even if you
+                delete them from this table. You should print a hard-copy of each PDF,
+                and if you wish you can also keep a digital copy here.
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+    <script type="module">
+        import { jsPDF } from "{{ url_for('static', filename='pdf/jspdf.es.min.js') }}";
+
+        let numberOfPlans = Number("{{ plans | length }}");
+
+        async function handleDelete(event) {
+            const planId = event.target.getAttribute('data-planid');
+            let success = false;
+            try {
+                const fetchResult = await fetch(
+                    "{{ url_for(service.get_blueprint_name() + '.plan_delete', plan_id='') }}" + encodeURIComponent(planId),
+                    {
+                        signal: AbortSignal.timeout(5000),
+                        method: 'DELETE',
+                        headers: {
+                                'accept': 'application/json',
+                                'content-type': 'application/json',
+                                'x-csrftoken': "{{ csrf_token() }}",
+                        },
+                    }
+                );
+                if (fetchResult.ok) {
+                    success = (await fetchResult.json()).ok;
+                }
+            } catch (err) {
+                console.error("DELETE fetch failed", err);
+            }
+            if (!success) {
+                showError(`{{ _("Failed to delete recovery plan.") }}`, 5000);
+                return;
+            }
+            document.getElementById('row-' + planId).remove();
+            numberOfPlans -= 1;
+            if (numberOfPlans === 0) {
+                document.getElementById("plans-table").classList.add('hidden');
+                document.getElementById("no-plans").classList.remove('hidden');
+            }
+        }
+
+        async function getQrCodeImage(value) {
+            document.getElementById('qr-code-generator').setAttribute('value', value);
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            return document.getElementById('qr-code-generator').el.children[1].src;
+        }
+
+        const lineMaxChars = 94;
+
+        function splitLines(text) {
+            const lines = [];
+            const words = text.split(/\s/g);
+            let lastLine = undefined;
+            for (const word of words) {
+                const newLine = `${lastLine === undefined ? '' : `${lastLine} `}${word}`;
+                if (newLine.length <= lineMaxChars) {
+                    lastLine = newLine;
+                } else {
+                    lines.push(lastLine);
+                    lastLine = `${word}`;
+                }
+            }
+            return lines.join('\n') + lastLine;
+        }
+
+        const lineHeighFactor = 1.5;
+
+        async function downloadRecoveryPdf(planId) {
+            let planData = undefined;
+            try {
+                const fetchResult = await fetch(
+                    "{{ url_for(service.get_blueprint_name() + '.plan_get', plan_id='') }}" + encodeURIComponent(planId),
+                    {
+                        signal: AbortSignal.timeout(5000),
+                        method: 'GET',
+                        headers: {
+                                'accept': 'application/json',
+                                'content-type': 'application/json',
+                                'x-csrftoken': "{{ csrf_token() }}",
+                        },
+                    },
+                );
+                if (fetchResult.ok) {
+                    planData = (await fetchResult.json()).plan;
+                }
+            } catch (err) {
+                console.error("GET fetch failed", err);
+            }
+            if (!planData) {
+                showError(`{{ _("Failed to download recovery guide.") }}`, 5000);
+                return;
+            }
+
+            const walletName = planData.wallet_name || planData.wallet_alias;
+
+            const doc = new jsPDF();
+            doc.addFont("{{ url_for('static', filename='fonts/RobotoMono-Regular.ttf') }}", "Roboto", "normal");
+            doc.addFont("{{ url_for('static', filename='fonts/RobotoMono-Bold.ttf') }}", "Roboto", "bold");
+            doc.setFont("Roboto", "normal");
+            doc.setLineHeightFactor(lineHeighFactor);
+            let currentHeight = 10;
+            doc.setFontSize(9);
+            doc.text(
+                `Recovery-Guide  Date: ${planData.created_at}  ID: ${planData.id}  Page: 1`,
+                105,
+                currentHeight,
+                {align: 'center'},
+            );
+            currentHeight += 4;
+            doc.addImage("{{ url_for(service.id +'_endpoint' + '.static', filename=service.logo) }}", 'PNG', 95, currentHeight, 20, 20);
+            currentHeight += 27;
+            doc.setFontSize(18);
+            doc.text("Timelock-Recovery Guide", 105, currentHeight, {align: 'center'});
+            currentHeight += 8;
+            doc.setFontSize(10);
+            const textLines0 = doc.splitTextToSize(
+                `This document will guide you through the process of recovering the funds on wallet: ${
+                    walletName
+                }. The process will take at least ${planData.timelock_days} days, and will eventually send the following ${
+                    planData.recovery_recipients.length > 1
+                    ? "amounts to the following addresses:"
+                    : "amount to the following address:"
+                }\n${
+                    planData.recovery_recipients.map(
+                        r => Object.entries(r),
+                    ).map(
+                        ([[address, amount]]) => `• ${address}: ${amount.toFixed()} BTC`,
+                    ).join('\n')
+                }\nBefore proceeding, MAKE SURE THAT YOU HAVE ACCESS TO THE ${
+                    planData.recovery_recipients.length > 1
+                    ? "WALLETS OF THESE ADDRESSES."
+                    : "WALLET OF THIS ADDRESS."
+                } The simplest way to do so is to send a small amount to the address, and then trying${
+                    ''
+                } to send all funds from that wallet to a different wallet. Also important: make sure that the ${
+                    planData.recovery_recipients.length > 1
+                    ? "seed-phrases of these wallets have not been compromised,"
+                    : "seed-phrase of this wallet has not been compromised,"
+                } or else a malicious actor could steal the funds the moment they reach their destination.${
+                    '\n'
+                }For more information, visit: https://timelockrecovery.com\n`,
+                190,
+            );
+            doc.text(textLines0, 10, currentHeight);
+            currentHeight += doc.getTextDimensions(textLines0).h;
+            doc.setFontSize(16);
+            doc.text("Step 1 - Broadcasting the Alert transaction", 10, currentHeight);
+            currentHeight += 8;
+            doc.setFontSize(10);
+            const numberOfAnchors = planData.alert_psbt_request_json.recipients.length - 1;
+            const textLines1 = doc.splitTextToSize(
+                `The first step is to broadcast the Alert transaction.${
+                    ''
+                } This transaction will keep most funds in the same wallet ${walletName},${
+                    numberOfAnchors > 0
+                        ? ` except for 600 sats that will be sent ${
+                                numberOfAnchors > 1 ? "sent to each of the following addresses" : "to the following address"
+                            } (and can be used in case you need to accelerate the transaction via Child-Pay-For-Parent,${
+                                ''
+                            } as we'll explain later):\n${
+                                planData.alert_psbt_request_json.recipients.slice(1).map((r) => ` • ${r.address}`).join('\n')
+                            }`
+                        : ` except for a small fee.`
+                }\nTo broadcast the Alert transaction, scan the QR code on page 2, and paste the content in one of the following${
+                    ''
+                } Bitcoin blockchain-explorer websites:\n${
+                    [
+                        "https://mempool.space/tx/push",
+                        "https://blockstream.info/tx/push",
+                        "https://coinb.in/#broadcast",
+                    ].map((u) => `• ${u}`).join('\n')
+                }\nYou should then see a success message for broadcasting transaction-id: ${
+                    planData.alert_txid
+                }`,
+                190,
+            );
+            doc.text(textLines1, 10, currentHeight);
+
+            doc.addPage();
+            currentHeight = 10;
+            doc.setFontSize(9);
+            doc.text(
+                `Recovery-Guide  Date: ${planData.created_at}  ID: ${planData.id}  Page: 2`,
+                105,
+                currentHeight,
+                {align: 'center'},
+            );
+            currentHeight += 10;
+            doc.setFontSize(14);
+            doc.text("Alert Transaction", 105, currentHeight, {align: 'center'});
+            currentHeight += 8;
+            doc.setFontSize(11);
+            doc.text(`Transaction Id: ${planData.alert_txid}`, 105, currentHeight, {align: 'center'});
+            currentHeight += 8;
+            doc.addImage(await getQrCodeImage(planData.alert_raw), 'PNG', 55, currentHeight, 100, 100);
+            currentHeight += 100;
+            doc.setFontSize(9);
+            const textLines2 = doc.splitTextToSize(planData.alert_raw, 190);
+            doc.text(textLines2, 10, currentHeight + 12);
+
+            doc.addPage();
+            currentHeight = 10;
+            doc.setFontSize(9);
+            doc.text(
+                `Recovery-Guide  Date: ${planData.created_at}  ID: ${planData.id}  Page: 3`,
+                105,
+                currentHeight,
+                {align: 'center'},
+            );
+            currentHeight += 10;
+            doc.setFontSize(16);
+            doc.text("Step 2 - Waiting for the Alert transaction confirmation", 10, currentHeight);
+            currentHeight += 8;
+            doc.setFontSize(10);
+            doc.text("You can follow the Alert transaction via any of the following links:", 10, currentHeight);
+            currentHeight += 5;
+            doc.setFontSize(9);
+            for (const linkUrl of [`https://mempool.space/tx/${planData.alert_txid}`, `https://blockstream.info/tx/${planData.alert_txid}`]) {
+                doc.addImage(await getQrCodeImage(linkUrl), 'PNG', 85, currentHeight, 40, 40);
+                currentHeight += 45;
+                doc.text(linkUrl, 105, currentHeight, { align: 'center' });
+                currentHeight += 5;
+            }
+            currentHeight += 5;
+            doc.setFontSize(10);
+            const textLines3 = doc.splitTextToSize(
+                `Please wait for a while until the transaction is marked as "confirmed" (number of confirmations greater than 0).${
+                    ""
+                } The time that takes a transaction to confirm depends on the fee that it pays, compared to the fee that other${
+                    ""
+                } pending transactions are willing to pay. At the time this document was created, it was hard to predict what a${
+                    ""
+                } reasonable fee would be today. If the transaction is not confirmed after 24 hours, you may try paying to a ${
+                    ""
+                } Transaction Acceleration service, such as the one offered by: https://mempool.space.com .${
+                    numberOfAnchors > 0
+                        ? ` Another solution, which may be cheaper but requires more technical skill, would be to use${
+                            numberOfAnchors > 1
+                                ? " one of the wallets that receive 600 sats (addresses mentioned in Step 1),"
+                                : " the wallet that receive 600 sats (address mentioned in Step 1),"
+                        } and send a high-fee transaction that includes that 600 sats UTXO (this transaction could also be from the${
+                            ""
+                        } wallet to itself). For more information, visit: https://timelockrecovery.com .`
+                        : ""
+                }`,
+                190,
+            );
+            doc.text(textLines3, 10, currentHeight);
+            currentHeight += doc.getTextDimensions(textLines3).h + 5;
+            doc.setFontSize(16);
+            doc.text("Step 3 - Broadcasting the Recovery transaction", 10, currentHeight);
+            currentHeight += 8;
+            doc.setFontSize(10);
+            const textLines4 = doc.splitTextToSize(
+                `Approximately ${planData.timelock_days} days after the Alert transaction has been confirmed, you${
+                    ""
+                } will be able to broadcast the second Recovery transaction that will send the funds to the final${
+                    planData.recovery_recipients.length > 1 ? " destinations," : " destination,"
+                } mentioned on the first page. This can be done using the same websites mentioned in Step 1, but${
+                    ""
+                } this time you will need to use QR code on page 4. If this transaction remains unconfirmed for a${
+                    ""
+                } long time, you should use the Transaction Acceleration service mentioned on Step 2, or use the${
+                    ""
+                } Child-Pay-For-Parent technique.`,
+                190,
+            );
+            doc.text(textLines4, 10, currentHeight);
+
+            doc.addPage();
+            currentHeight = 10;
+            doc.setFontSize(9);
+            doc.text(
+                `Recovery-Guide  Date: ${planData.created_at}  ID: ${planData.id}  Page: 4`,
+                105,
+                currentHeight,
+                {align: 'center'},
+            );
+            currentHeight += 10;
+            doc.setFontSize(14);
+            doc.text("Recovery Transaction", 105, currentHeight, {align: 'center'});
+            currentHeight += 8;
+            doc.setFontSize(11);
+            doc.text(`Transaction Id: ${planData.recovery_txid}`, 105, currentHeight, {align: 'center'});
+            currentHeight += 8;
+            doc.addImage(await getQrCodeImage(planData.recovery_raw), 'PNG', 55, currentHeight, 100, 100);
+            currentHeight += 100;
+            doc.setFontSize(9);
+            const textLines5 = doc.splitTextToSize(planData.recovery_raw, 190);
+            doc.text(textLines5, 10, currentHeight + 12);
+
+            doc.save(`timelock-recovery-guide-${planData.id}`);
+        }
+
+        async function downloadCancellationPdf(planId) {
+            let planData = undefined;
+            try {
+                const fetchResult = await fetch(
+                    "{{ url_for(service.get_blueprint_name() + '.plan_get', plan_id='') }}" + encodeURIComponent(planId),
+                    {
+                        signal: AbortSignal.timeout(5000),
+                        method: 'GET',
+                        headers: {
+                                'accept': 'application/json',
+                                'content-type': 'application/json',
+                                'x-csrftoken': "{{ csrf_token() }}",
+                        },
+                    },
+                );
+                if (fetchResult.ok) {
+                    planData = (await fetchResult.json()).plan;
+                }
+            } catch (err) {
+                console.error("GET fetch failed", err);
+            }
+            if (!planData) {
+                showError(`{{ _("Failed to download recovery-cancellation guide.") }}`, 5000);
+                return;
+            }
+
+            const walletName = planData.wallet_name || planData.wallet_alias;
+
+            const doc = new jsPDF();
+            doc.addFont("{{ url_for('static', filename='fonts/RobotoMono-Regular.ttf') }}", "Roboto", "normal");
+            doc.addFont("{{ url_for('static', filename='fonts/RobotoMono-Bold.ttf') }}", "Roboto", "bold");
+            doc.setFont("Roboto", "normal");
+            doc.setLineHeightFactor(lineHeighFactor);
+            let currentHeight = 10;
+            doc.setFontSize(9);
+            doc.text(
+                `Cancellation-Guide  Date: ${planData.created_at}  ID: ${planData.id}  Page: 1`,
+                105,
+                currentHeight,
+                {align: 'center'},
+            );
+            currentHeight += 10;
+            doc.setFontSize(18);
+            doc.text("Timelock-Recovery Cancellation Guide", 105, currentHeight, {align: 'center'});
+            currentHeight += 10;
+            doc.setFontSize(10);
+            const textLines0 = doc.splitTextToSize(
+                `This document is intended solely for the eyes of the owner of wallet: ${
+                    walletName
+                }. The Recovery Guide (the other document) will allow to transfer the funds from this wallet to ${
+                    planData.recovery_recipients.length > 1
+                    ? "different wallets"
+                    : "a different wallet"
+                } within ${planData.timelock_days} days. To prevent this from happening accidentally or maliciously by someone${
+                    ""
+                } who found that document, you should periodically check if the Alert transaction has been broadcasted, using${
+                    ""
+                } a Bitcoin blockchain-explorer website such as:\n`,
+                190,
+            );
+            doc.text(textLines0, 10, currentHeight);
+            currentHeight += doc.getTextDimensions(textLines0).h;
+            doc.setFontSize(9);
+            for (const linkUrl of [`https://mempool.space/tx/${planData.alert_txid}`, `https://blockstream.info/tx/${planData.alert_txid}`]) {
+                doc.addImage(await getQrCodeImage(linkUrl), 'PNG', 85, currentHeight, 40, 40);
+                currentHeight += 45;
+                doc.text(linkUrl, 105, currentHeight, { align: 'center' });
+                currentHeight += 5;
+            }
+            currentHeight += 5;
+            doc.setFontSize(10);
+            const textLines1 = doc.splitTextToSize(
+                `It is also recommended to use a Watch-Tower service that will notify you immediately if the${
+                    ''
+                } Alert transaction has been broadcasted. For more details, visit: https://timelockrecovery.com .`,
+                190,
+            );
+            doc.text(textLines1, 10, currentHeight);
+            currentHeight += doc.getTextDimensions(textLines1).h + 5;
+
+            if (planData.cancellation_txid) {
+                const textLines2 = doc.splitTextToSize(
+                    `In case the Alert transaction has been broadcasted, and you want to stop the funds from${
+                        ""
+                    } leaving this wallet, you can scan the QR code on page 2, and broadcast${
+                        ""
+                    } the content using one of the following Bitcoin blockchain-explorer websites:${
+                        [
+                            "https://mempool.space/tx/push",
+                            "https://blockstream.info/tx/push",
+                            "https://coinb.in/#broadcast",
+                        ].map((u) => `• ${u}`).join('\n')
+                    }\nIf the transaction is not confirmed within reasonable time due to a low fee, you will have${
+                        ""
+                    } to access the wallet and use Replace-By-Fee/Child-Pay-For-Parent to move the funds to a new${
+                        ""
+                    } address on your walelt. (you can also pay to an Acceleration Service such as the one offerred${
+                        ""
+                    } by https://mempool.space )${
+                        "\n"
+                    }IMPORTANT NOTICE: If you lost the keys to access wallet ${walletName} - do not broadcast the${
+                        ""
+                    } transaction on page 2! In this case it is recommended to destroy all copies of this document.`,
+                    190,
+                );
+                doc.text(textLines2, 10, currentHeight);
+
+                doc.addPage();
+                currentHeight = 10;
+                doc.setFontSize(9);
+                doc.text(
+                    `Cancellation-Guide  Date: ${planData.created_at}  ID: ${planData.id}  Page: 2`,
+                    105,
+                    currentHeight,
+                    {align: 'center'},
+                );
+                currentHeight += 10;
+                doc.setFontSize(14);
+                doc.text("Cancellation Transaction", 105, currentHeight, {align: 'center'});
+                currentHeight += 8;
+                doc.setFontSize(11);
+                doc.text(`Transaction Id: ${planData.cancellation_txid}`, 105, currentHeight, {align: 'center'});
+                currentHeight += 8;
+                doc.addImage(await getQrCodeImage(planData.cancellation_raw), 'PNG', 55, currentHeight, 100, 100);
+                currentHeight += 100;
+                doc.setFontSize(9);
+                const textLines3 = doc.splitTextToSize(planData.cancellation_raw, 190);
+                doc.text(textLines3, 10, currentHeight + 12);
+            } else {
+                const textLines4 = doc.splitTextToSize(
+                    `In case the Alert transaction has been broadcasted, and you want to stop the funds from${
+                        ""
+                    } leaving this wallet (by the Recovery transaction), you should move its funds to a new wallet${
+                        ""
+                    } or to a new address on the same wallet: ${walletName}.`,
+                    190,
+                );
+                doc.text(textLines4, 10, currentHeight);
+            }
+            doc.save(`timelock-recovery-plan-${planData.id}`);
+        }
+
+        let asyncQueue = Promise.resolve();
+
+        function handleDownloadRecovery(event) {
+            asyncQueue = asyncQueue.then(() => downloadRecoveryPdf(event.target.getAttribute('data-planid'))).catch((err) => {
+                console.error("Failed to download recovery pdf", err);
+            });
+        }
+
+        function handleDownloadCancellation(event) {
+            asyncQueue = asyncQueue.then(() => downloadCancellationPdf(event.target.getAttribute('data-planid'))).catch((err) => {
+                console.error("Failed to download cancellation pdf", err);
+            });
+        }
+
+        document.addEventListener("DOMContentLoaded", async () => {
+            for (const button of document.querySelectorAll('.delete-button')) {
+                button.addEventListener("click", handleDelete);
+            }
+            for (const button of document.querySelectorAll('.download-recovery-button')) {
+                button.addEventListener("click", handleDownloadRecovery);
+            }
+            for (const button of document.querySelectorAll('.download-cancellation-button')) {
+                button.addEventListener("click", handleDownloadCancellation);
+            }
+            if (numberOfPlans > 0) {
+                document.getElementById("plans-table").classList.remove('hidden');
+            } else {
+                document.getElementById("no-plans").classList.remove('hidden');
+            }
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const planId = urlParams.get('plan');
+            if (planId) {
+                asyncQueue = asyncQueue.then(async () => {
+                    try {
+                        await downloadRecoveryPdf(planId);
+                        await downloadCancellationPdf(planId);
+                        urlParams.delete('plan');
+                        history.replaceState(
+                            null,
+                            document.title,
+                            `${location.pathname}${urlParams.size === 0 ? '' : `?${urlParams}`}`,
+                        );
+                    } catch (error) {
+                        console.error("Failed to auto-download pdfs", planId)
+                    }
+                });
+            }
+        });
+    </script>
+{% endblock %}

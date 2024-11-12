@@ -1,7 +1,9 @@
+from datetime import datetime
 import logging
 import random
 import json
 from binascii import b2a_base64
+import uuid
 from flask import redirect, render_template, request, url_for, flash, abort
 from flask import current_app as app
 from flask_login import login_required, current_user
@@ -49,6 +51,7 @@ def index():
 
 @timelockrecovery_endpoint.route("/step1", methods=["POST"])
 @login_required
+@user_secret_decrypted_required
 def step1_post():
     verify_not_liquid()
     user = app.specter.user_manager.get_user()
@@ -57,6 +60,7 @@ def step1_post():
 
 @timelockrecovery_endpoint.route("/step1", methods=["GET"])
 @login_required
+@user_secret_decrypted_required
 def step1_get():
     verify_not_liquid()
     wallet_names = sorted(current_user.wallet_manager.wallets.keys())
@@ -68,6 +72,7 @@ def step1_get():
 
 @timelockrecovery_endpoint.route("/step2", methods=["GET"])
 @login_required
+@user_secret_decrypted_required
 def step2():
     verify_not_liquid()
     wallet_alias = request.args.get('wallet')
@@ -93,6 +98,7 @@ def step2():
 
 @timelockrecovery_endpoint.route("/step3", methods=["POST"])
 @login_required
+@user_secret_decrypted_required
 def step3_post():
     verify_not_liquid()
     wallet_alias = request.args.get('wallet')
@@ -148,6 +154,7 @@ def step3_get():
 
 @timelockrecovery_endpoint.route("/step4", methods=["POST"])
 @login_required
+@user_secret_decrypted_required
 def step4_post():
     verify_not_liquid()
     wallet_alias = request.args.get('wallet')
@@ -161,12 +168,14 @@ def step4_post():
     request_data = json.loads(request.form["request_data"])
 
     if action == "prepare":
-        alert_tx = Transaction.from_string(request.form["alert_raw"])
+        alert_raw = request.form["alert_raw"]
+        alert_tx = Transaction.from_string(alert_raw)
+        alert_txid = alert_tx.txid().hex()
 
         sequence = round((request_data["timelock_days"] * 24 * 60 - (11 * 10 / 2)) * 60 / 512)
 
         recovery_psbt = app.specter.rpc.createpsbt(
-            [{"txid": alert_tx.txid().hex(), "vout": 0, "sequence": sequence}],
+            [{"txid": alert_txid, "vout": 0, "sequence": sequence}],
             request_data["recovery_recipients"],
         )
 
@@ -178,7 +187,8 @@ def step4_post():
             devices=list(zip(wallet.keys, wallet.devices)),
         )
 
-        request_data["alert_raw"] = request.form["alert_raw"]
+        request_data["alert_raw"] = alert_raw
+        request_data["alert_txid"] = alert_txid
 
         return render_template(
             "timelockrecovery/step4.jinja",
@@ -211,6 +221,7 @@ def step4_get():
 
 @timelockrecovery_endpoint.route("/step5", methods=["POST"])
 @login_required
+@user_secret_decrypted_required
 def step5_post():
     verify_not_liquid()
     wallet_alias = request.args.get('wallet')
@@ -241,7 +252,9 @@ def step5_post():
             devices=list(zip(wallet.keys, wallet.devices)),
         )
 
-        request_data["recovery_raw"] = request.form["recovery_raw"]
+        recovery_raw = request.form["recovery_raw"]
+        request_data["recovery_raw"] = recovery_raw
+        request_data["recovery_txid"] = Transaction.from_string(recovery_raw).txid().hex()
 
         return render_template(
             "timelockrecovery/step5.jinja",
@@ -274,6 +287,7 @@ def step5_get():
 
 @timelockrecovery_endpoint.route("/step6", methods=["POST"])
 @login_required
+@user_secret_decrypted_required
 def step6_post():
     verify_not_liquid()
     wallet_alias = request.args.get('wallet')
@@ -282,7 +296,68 @@ def step6_post():
         raise SpecterError(
             "Wallet could not be loaded. Are you connected with Bitcoin Core?"
         )
-    return "<pre style=\"font-size: 2rem;\">hi\nrequest_data: " + json.dumps(json.loads(request.form["request_data"]), indent=2).replace('<', '&lt;') + "\ncancellation_raw: " + request.form.get("cancellation_raw", "") + "</pre>"
+    plan_id = str(uuid.uuid4())
+    request_data = json.loads(request.form["request_data"])
+    cancellation_raw = request.form.get("cancellation_raw", "")
+    request_data["cancellation_raw"] = cancellation_raw
+    request_data["cancellation_txid"] = "" if cancellation_raw == "" else Transaction.from_string(cancellation_raw).txid().hex()
+    request_data["wallet_alias"] = wallet_alias
+    request_data["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    request_data["id"] = plan_id
+
+    plans = TimelockrecoveryService.get_recovery_plans()
+    if plans and isinstance(plans[0], str):
+        plans = []
+    plans.append(request_data)
+    TimelockrecoveryService.set_recovery_plans(plans)
+
+    return redirect(url_for(f"{ TimelockrecoveryService.get_blueprint_name() }.plans") + f"?plan={plan_id}")
+
+@timelockrecovery_endpoint.route("/step6", methods=["GET"])
+@login_required
+def step6_get():
+    wallet_alias = request.args.get('wallet')
+    if wallet_alias:
+        return redirect(url_for(f"{ TimelockrecoveryService.get_blueprint_name()}.step2") + f"?wallet={wallet_alias}")
+    return redirect(url_for(f"{ TimelockrecoveryService.get_blueprint_name()}.step1_get"))
+
+@timelockrecovery_endpoint.route("/plans", methods=["GET"])
+@login_required
+@user_secret_decrypted_required
+def plans():
+    plans = [
+        {
+            "id": plan["id"],
+            "wallet_alias": plan["wallet_alias"],
+            "wallet": current_user.wallet_manager.get_by_alias(plan["wallet_alias"]),
+            "created_at": plan["created_at"]
+        } for plan in TimelockrecoveryService.get_recovery_plans()
+    ]
+    return render_template(
+        "timelockrecovery/plans.jinja",
+        plans=plans,
+    )
+
+@timelockrecovery_endpoint.route("/plans/<plan_id>", methods=["GET"])
+@login_required
+@user_secret_decrypted_required
+def plan_get(plan_id):
+    plans = [plan for plan in TimelockrecoveryService.get_recovery_plans() if plan["id"] == plan_id]
+    if not plans:
+        return { "error": "Plan does not exist" }, 404
+    plan = plans[0]
+    wallet = current_user.wallet_manager.get_by_alias(plan["wallet_alias"])
+    if wallet:
+        plan["wallet_name"] = wallet.name
+    return { "plan": plan }
+
+@timelockrecovery_endpoint.route("/plans/<plan_id>", methods=["DELETE"])
+@login_required
+@user_secret_decrypted_required
+def plan_delete(plan_id):
+    plans = [plan for plan in TimelockrecoveryService.get_recovery_plans() if plan["id"] != plan_id]
+    TimelockrecoveryService.set_recovery_plans(plans)
+    return { "ok": True }
 
 
 @timelockrecovery_endpoint.route("/transactions")
@@ -300,6 +375,7 @@ def transactions():
 
 @timelockrecovery_endpoint.route("/settings", methods=["GET"])
 @login_required
+@user_secret_decrypted_required
 def settings_get():
     associated_wallet: Wallet = TimelockrecoveryService.get_associated_wallet()
 

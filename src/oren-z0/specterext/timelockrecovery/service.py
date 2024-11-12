@@ -21,6 +21,7 @@ class TimelockrecoveryService(Service):
     desc = "Create timelock-based recovery solutions."
     has_blueprint = True
     blueprint_module = "oren-z0.specterext.timelockrecovery.controller"
+    encrypt_data = True
 
     devstatus = devstatus_alpha
     isolated_client = False
@@ -132,3 +133,14 @@ class TimelockrecoveryService(Service):
         else:
             flash(_("Device already signed the PSBT"), "error")
             return psbt, None
+
+    @classmethod
+    def get_recovery_plans(cls):
+        wrapper = TimelockrecoveryService.get_current_user_service_data().get("recovery_plans", {"version": 1, "plans": []})
+        return wrapper["plans"]
+
+    @classmethod
+    def set_recovery_plans(cls, plans):
+        wrapper = TimelockrecoveryService.get_current_user_service_data().get("recovery_plans", {"version": 1, "plans": []})
+        wrapper["plans"] = plans
+        TimelockrecoveryService.update_current_user_service_data({ "recovery_plans": wrapper })
