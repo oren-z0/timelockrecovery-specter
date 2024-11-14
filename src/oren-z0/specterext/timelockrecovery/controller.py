@@ -54,8 +54,7 @@ def index():
 @user_secret_decrypted_required
 def step1_post():
     verify_not_liquid()
-    user = app.specter.user_manager.get_user()
-    user.add_service(TimelockrecoveryService.id)
+    current_user.add_service(TimelockrecoveryService.id)
     return redirect(url_for(f"{ TimelockrecoveryService.get_blueprint_name()}.step1_get"))
 
 @timelockrecovery_endpoint.route("/step1", methods=["GET"])
@@ -359,34 +358,14 @@ def plan_delete(plan_id):
     TimelockrecoveryService.set_recovery_plans(plans)
     return { "ok": True }
 
-
-@timelockrecovery_endpoint.route("/transactions")
-@login_required
-def transactions():
-    # The wallet currently configured for ongoing autowithdrawals
-    wallet: Wallet = TimelockrecoveryService.get_associated_wallet()
-
-    return render_template(
-        "timelockrecovery/transactions.jinja",
-        wallet=wallet,
-        services=app.specter.service_manager.services,
-    )
-
-
 @timelockrecovery_endpoint.route("/settings", methods=["GET"])
 @login_required
 @user_secret_decrypted_required
 def settings_get():
-    associated_wallet: Wallet = TimelockrecoveryService.get_associated_wallet()
-
-    # Get the user's Wallet objs, sorted by Wallet.name
-    wallet_names = sorted(current_user.wallet_manager.wallets.keys())
-    wallets = [current_user.wallet_manager.wallets[name] for name in wallet_names]
-
     return render_template(
         "timelockrecovery/settings.jinja",
-        associated_wallet=associated_wallet,
-        wallets=wallets,
+        show_menu="yes" if current_user.has_service(TimelockrecoveryService.id) else "no",
+        has_recovery_plans=len(TimelockrecoveryService.get_recovery_plans()) > 0,
         cookies=request.cookies,
     )
 
@@ -394,16 +373,28 @@ def settings_get():
 @login_required
 def settings_post():
     show_menu = request.form["show_menu"]
-    user = app.specter.user_manager.get_user()
     if show_menu == "yes":
-        user.add_service(TimelockrecoveryService.id)
+        current_user.add_service(TimelockrecoveryService.id)
     else:
-        user.remove_service(TimelockrecoveryService.id)
-    used_wallet_alias = request.form.get("used_wallet")
-    if used_wallet_alias != None:
-        wallet = current_user.wallet_manager.get_by_alias(used_wallet_alias)
-        TimelockrecoveryService.set_associated_wallet(wallet)
-    return redirect(url_for(f"{ TimelockrecoveryService.get_blueprint_name()}.settings_get"))
+        current_user.remove_service(TimelockrecoveryService.id)
+    return redirect(url_for(f"{TimelockrecoveryService.get_blueprint_name()}.settings_get"))
+
+@timelockrecovery_endpoint.route("/remove_extension", methods=["POST"])
+@login_required
+@user_secret_decrypted_required
+def remove_extension_post():
+    if len(TimelockrecoveryService.get_recovery_plans()) > 0:
+        return redirect(url_for(f"{TimelockrecoveryService.get_blueprint_name()}.settings_get"))
+    for wallet in current_user.wallet_manager.wallets.values():
+        TimelockrecoveryService.deassociate_all_addresses(wallet)
+    current_user.remove_service(TimelockrecoveryService.id)
+    return redirect(url_for("wallets_endpoint.wallets_overview"))
+
+@timelockrecovery_endpoint.route("/remove_extension", methods=["GET"])
+@login_required
+def remove_extension_get():
+    return redirect(url_for("wallets_endpoint.wallets_overview"))
+
 
 @timelockrecovery_endpoint.route("/create_alert_psbt_recovery_vsize/<wallet_alias>", methods=["POST"])
 @login_required
