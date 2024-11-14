@@ -109,6 +109,15 @@
 			</div>
         </div>
 
+		<label class="checkbox-wrapper-inline">
+            <input type="checkbox" class="checkbox-input" id="different-anchor-addresses-checkbox">
+            <span class="checkbox-label">Select different anchor addresses from recipients (each would receive 600 sats)</span>
+        </label>
+
+		<div class="hidden mt-3" id="different-anchor-addresses-input-wrapper">
+			<textarea id="different-anchor-addresses-input" placeholder="List of addresses separated by spaces or newlines"></textarea>
+		</div>
+
 		<div id="not-enough-funds-for-cancellation" class="warning hidden">
 			Not enough funds left for cancellation transaction.
 			The recovered funds will be less than 600 sats.
@@ -158,6 +167,18 @@
 		// 0xFFFF * 512 seconds = 388.36 days.
 		const maxLocktimeDatys = 388;
 
+		function getAnchorAddresses() {
+			if (document.getElementById('different-anchor-addresses-checkbox').checked) {
+				return document.getElementById('different-anchor-addresses-input').value.split(
+					/\s+/,
+				).filter(Boolean).map((address) => ({
+					address,
+					label: "",
+				}));
+			}
+			return [...document.querySelectorAll('#recipients > recipient-box')];
+		}
+
 		let alertPsbtRequestJson = undefined;
 		let recoveryTransactionVSize = undefined;
 		let cancellationTransactionVSize = undefined;
@@ -184,8 +205,8 @@
 				if (asyncTracker !== simulateAlertTransactionAsyncTracker) {
 					return;
 				}
-				const recipientList = [...document.querySelectorAll('#recipients > recipient-box')];
-				if (recipientList.length === 0 || recipientList.some((r) => !validateAddress(r.address))) {
+				const anchorAddresses = getAnchorAddresses();
+				if (anchorAddresses.some(({ address }) => !validateAddress(address))) {
 					return;
 				}
 				const feeSelectionComponent = document.getElementById('main-transaction-fee-selection-component');
@@ -197,11 +218,11 @@
 					recipients: [
 						{
 							address: "{{ reserved_address.address }}",
-							amount: (Math.round(Number(amountAvailable) * 1e8) - anchorOutputAmountSats * recipientList.length) / 1e8,
+							amount: (Math.round(Number(amountAvailable) * 1e8) - anchorOutputAmountSats * anchorAddresses.length) / 1e8,
 							unit: "btc",
 							label: "{{ reserved_address.label }}"
 						},
-						...recipientList.map(({ address, label }) => ({
+						...anchorAddresses.map(({ address, label }) => ({
 							address,
 							amount: anchorOutputAmountSats / 1e8,
 							unit: "btc",
@@ -226,7 +247,7 @@
 						},
 						body: JSON.stringify({
 							alert_psbt_request_json: alertPsbtRequestJson,
-							recovery_recipients: recipientList.map(({ address }) => address),
+							recovery_recipients: anchorAddresses.map(({ address }) => address),
 						}),
 					},
 				);
@@ -315,7 +336,7 @@
 
 		function psbtFailReason(error) {
 			if (/Invalid\sBitcoin\saddress(:\s\w+)?$/i.test(error)) {
-				return "Invalid recipient address.";
+				return "Invalid recipient or anchor address.";
 			}
 			if (/Invalid\sparameter,\sduplicated\saddress(:\s\w+)?$/i.test(error)) {
 				return "Duplicated address.";
@@ -442,6 +463,19 @@
 			simulateAlertTransaction();
 		}
 
+		function toggleDifferentAnchorAddresses(event) {
+			if (event.target.checked) {
+				document.getElementById('different-anchor-addresses-input').value = [
+					...document.querySelectorAll('#recipients > recipient-box')
+				].map((r) => r.address).filter((address) => validateAddress(address)).join('\n');
+				document.getElementById('different-anchor-addresses-input-wrapper').classList.remove('hidden');
+			} else {
+				document.getElementById('different-anchor-addresses-input-wrapper').classList.add('hidden');
+				document.getElementById('different-anchor-addresses-input').value = '';
+			}
+			simulateAlertTransaction();
+		}
+
 		function submitForm() {
 			if (isSimulatingAlertTransaction) {
 				return;
@@ -466,6 +500,15 @@
 					return;
 				}
 				recipientIndex += 1;
+			}
+			const anchorAddresses = getAnchorAddresses().map((r) => r.address);
+			if (anchorAddresses.some((address) => !validateAddress(address))) {
+				showError("One or more anchor addresses is invalid.", 5000);
+				return;
+			}
+			if (new Set(anchorAddresses).size !== anchorAddresses.length) {
+				showError("One of the anchor addresses repeats twice.", 5000);
+				return;
 			}
 			recipientIndex = 0;
 			for (const recipient of recipientList) {
@@ -544,6 +587,8 @@
 			document.getElementById('cancellation-transaction-fee-selection-component').addEventListener('change', simulateSecondaryTransactions);
 			document.getElementById('add-recipient').onclick = () => addRecipient('', '', 'btc', '');
 			document.getElementById('multiple-fees').addEventListener('input', toggleMultipleFees);
+			document.getElementById('different-anchor-addresses-checkbox').addEventListener('input', toggleDifferentAnchorAddresses);
+			document.getElementById('different-anchor-addresses-input').addEventListener('input', simulateAlertTransaction);
 			document.getElementById('next-button').onclick = submitForm;
 		});
 	</script>
