@@ -98,14 +98,15 @@
             <span class="checkbox-label">Select different fee-rate for each transaction</span>
         </label>
 
-        <div class="hidden" id="recovery-transaction-fee-selection-wrapepr">
-            <h3 class="mt-5">Recovery Transaction - {{ _("Fee Selection") }}</h3>
-            <timelockrecovery-fee-selection id="recovery-transaction-fee-selection-component" rbf-enabled="false"></timelockrecovery-fee-selection>
-        </div>
-
-        <div class="hidden" id="cancellation-transaction-fee-selection-wrapepr">
-            <h3 class="mt-5">Optional: Cancellation Transaction - {{ _("Fee Selection") }}</h3>
-            <timelockrecovery-fee-selection id="cancellation-transaction-fee-selection-component" rbf-enabled="false"></timelockrecovery-fee-selection>
+        <div class="hidden" id="multiple-fees-selection-wrapper">
+			<div>
+				<h3 class="mt-5">Recovery Transaction - {{ _("Fee Selection") }}</h3>
+				<timelockrecovery-fee-selection id="recovery-transaction-fee-selection-component" rbf-enabled="false"></timelockrecovery-fee-selection>
+			</div>
+			<div>
+				<h3 class="mt-5">Optional: Cancellation Transaction - {{ _("Fee Selection") }}</h3>
+				<timelockrecovery-fee-selection id="cancellation-transaction-fee-selection-component" rbf-enabled="false"></timelockrecovery-fee-selection>
+			</div>
         </div>
 
 		<div id="not-enough-funds-for-cancellation" class="warning hidden">
@@ -432,15 +433,13 @@
 
 		function toggleMultipleFees(event) {
 			if (event.target.checked) {
-					document.getElementById('recovery-transaction-fee-selection-wrapepr').classList.remove('hidden');
-					document.getElementById('cancellation-transaction-fee-selection-wrapepr').classList.remove('hidden');
-					document.getElementById('alert-transaction-fee-label').classList.remove('hidden');
-				} else {
-					document.getElementById('recovery-transaction-fee-selection-wrapepr').classList.add('hidden');
-					document.getElementById('cancellation-transaction-fee-selection-wrapepr').classList.add('hidden');
-					document.getElementById('alert-transaction-fee-label').classList.add('hidden');
-				}
-				simulateAlertTransaction();
+				document.getElementById('multiple-fees-selection-wrapper').classList.remove('hidden');
+				document.getElementById('alert-transaction-fee-label').classList.remove('hidden');
+			} else {
+				document.getElementById('multiple-fees-selection-wrapper').classList.add('hidden');
+				document.getElementById('alert-transaction-fee-label').classList.add('hidden');
+			}
+			simulateAlertTransaction();
 		}
 
 		function submitForm() {
