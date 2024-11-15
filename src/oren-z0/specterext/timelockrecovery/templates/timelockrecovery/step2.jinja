@@ -218,14 +218,14 @@
 					recipients: [
 						{
 							address: "{{ reserved_address.address }}",
-							amount: (Math.round(Number(amountAvailable) * 1e8) - anchorOutputAmountSats * anchorAddresses.length) / 1e8,
-							unit: "btc",
+							amount: (Math.floor(Number(amountAvailable) * 1e8) - anchorOutputAmountSats * anchorAddresses.length),
+							unit: "sat",
 							label: "{{ reserved_address.label }}"
 						},
 						...anchorAddresses.map(({ address, label }) => ({
 							address,
-							amount: anchorOutputAmountSats / 1e8,
-							unit: "btc",
+							amount: anchorOutputAmountSats,
+							unit: "sat",
 							label,
 						})),
 					],
