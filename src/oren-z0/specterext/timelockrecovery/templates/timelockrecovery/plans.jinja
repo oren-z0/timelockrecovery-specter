@@ -169,7 +169,7 @@
                     planData.recovery_recipients.map(
                         r => Object.entries(r),
                     ).map(
-                        ([[address, amount]]) => `• ${address}: ${amount.toFixed()} BTC`,
+                        ([[address, amount]]) => `• ${address}: ${amount.toFixed(8)} BTC`,
                     ).join('\n')
                 }\nBefore proceeding, MAKE SURE THAT YOU HAVE ACCESS TO THE ${
                     planData.recovery_recipients.length > 1
