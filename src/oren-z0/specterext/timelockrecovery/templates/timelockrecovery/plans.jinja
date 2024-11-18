@@ -19,7 +19,7 @@
                     {% for plan in plans %}
                     <tr id="row-{{ plan['id'] }}">
                         <td>{{ plan["created_at"] }}</td>
-                        <td>{{ plan.get("wallet_name", plan["wallet_alias"]) }}</td>
+                        <td>{% if plan.get("wallet", None) %} {{plan["wallet"].name}} {% else %} {{plan["wallet_alias"]}} {% endif %}</td>
                         <td>
                             <button class="download-recovery-button btn bg-dark-600" data-planid="{{ plan['id'] }}" >
                                 Download Recovery Guide

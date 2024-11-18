@@ -324,14 +324,19 @@ def step6_get():
 @login_required
 @user_secret_decrypted_required
 def plans():
-    plans = [
-        {
+    plans = []
+    for plan in TimelockrecoveryService.get_recovery_plans():
+        try:
+            wallet = current_user.wallet_manager.get_by_alias(plan["wallet_alias"] + "x")
+        except SpecterError as e:
+            logger.warning("Failed to find wallet of recovery plan - it may have been deleted.", e)
+            wallet = None
+        plans.append({
             "id": plan["id"],
             "wallet_alias": plan["wallet_alias"],
-            "wallet": current_user.wallet_manager.get_by_alias(plan["wallet_alias"]),
+            "wallet": wallet,
             "created_at": plan["created_at"]
-        } for plan in TimelockrecoveryService.get_recovery_plans()
-    ]
+        })
     return render_template(
         "timelockrecovery/plans.jinja",
         plans=plans,
@@ -345,9 +350,11 @@ def plan_get(plan_id):
     if not plans:
         return { "error": "Plan does not exist" }, 404
     plan = plans[0]
-    wallet = current_user.wallet_manager.get_by_alias(plan["wallet_alias"])
-    if wallet:
+    try:
+        wallet = current_user.wallet_manager.get_by_alias(plan["wallet_alias"])
         plan["wallet_name"] = wallet.name
+    except SpecterError as e:
+        logger.warning("Failed to find wallet of recovery plan - it may have been deleted.", e)
     return { "plan": plan }
 
 @timelockrecovery_endpoint.route("/plans/<plan_id>", methods=["DELETE"])
