@@ -1,14 +1,11 @@
-from base64 import b64decode
 import json
 import logging
 
-from cryptoadvance.specter.services.service import Service, devstatus_alpha, devstatus_prod, devstatus_beta
-# A SpecterError can be raised and will be shown to the user as a red banner
-from cryptoadvance.specter.specter_error import SpecterError, handle_exception
+from cryptoadvance.specter.services.service import Service, devstatus_alpha
+from cryptoadvance.specter.specter_error import handle_exception
 from flask import current_app as app, flash
 from flask_babel import lazy_gettext as _
 from cryptoadvance.specter.wallet import Wallet
-from flask_apscheduler import APScheduler
 from embit.psbt import PSBT
 
 logger = logging.getLogger(__name__)

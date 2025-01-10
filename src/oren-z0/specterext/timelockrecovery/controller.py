@@ -4,7 +4,7 @@ import random
 import json
 from binascii import b2a_base64
 import uuid
-from flask import redirect, render_template, request, url_for, flash, abort
+from flask import redirect, render_template, request, url_for
 from flask import current_app as app
 from flask_login import login_required, current_user
 from flask_babel import lazy_gettext as _
