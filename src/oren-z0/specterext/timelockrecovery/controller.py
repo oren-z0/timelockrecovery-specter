@@ -8,7 +8,7 @@ from flask import redirect, render_template, request, url_for
 from flask import current_app as app
 from flask_login import login_required, current_user
 from flask_babel import lazy_gettext as _
-from embit.transaction import Transaction
+from embit.transaction import Transaction, TransactionInput, TransactionOutput, Script
 
 from cryptoadvance.specter.specter import Specter
 from cryptoadvance.specter.services.controller import user_secret_decrypted_required
@@ -418,22 +418,45 @@ def create_alert_psbt_recovery_vsize(wallet_alias):
     psbt = psbt_creator.create_psbt(wallet)
     single_input_extra_vsize = (psbt_creator.psbt_as_object.extra_input_weight + 3) / 4
 
-    raw_recovery_tx_hex = app.specter.rpc.createrawtransaction(
-        [{"txid": psbt["tx"]["txid"], "vout": 0}],
-        [{address: 0} for address in request.json["recovery_recipients"]],
-        0,
-        True
+    try:
+        recovery_recipients = [Script.from_address(address) for address in request.json["recovery_recipients"]]
+    except:
+        return { "error": "Invalid Bitcoin address" }
+    raw_recovery_tx = Transaction(
+        version=2,
+        vin=[TransactionInput(
+            txid=bytes.fromhex(psbt["tx"]["txid"]),
+            vout=0,
+            sequence=0xfffffffd,
+        )],
+        vout=[TransactionOutput(
+            0,
+            address,
+        ) for address in recovery_recipients],
+        locktime=0,
     )
-    raw_recovery_tx_size = len(raw_recovery_tx_hex) / 2
+    raw_recovery_tx_size = len(raw_recovery_tx.serialize())
 
-    cancellation_address = TimelockrecoveryService.get_or_reserve_addresses(wallet)[1].address
-    raw_cancellation_tx_hex = app.specter.rpc.createrawtransaction(
-        [{"txid": psbt["tx"]["txid"], "vout": 0}],
-        [{cancellation_address: 0}],
-        0,
-        True
+    cancellation_address_string = TimelockrecoveryService.get_or_reserve_addresses(wallet)[1].address
+    try:
+        cancellation_address = Script.from_address(cancellation_address_string)
+    except:
+        return { "error": f"Invalid Bitcoin address: {cancellation_address_string}" }
+
+    raw_cancellation_tx = Transaction(
+        version=2,
+        vin=[TransactionInput(
+            txid=bytes.fromhex(psbt["tx"]["txid"]),
+            vout=0,
+            sequence=0xfffffffd,
+        )],
+        vout=[TransactionOutput(
+            0,
+            cancellation_address,
+        )],
+        locktime=0,
     )
-    raw_cancellation_tx_size = len(raw_cancellation_tx_hex) / 2
+    raw_cancellation_tx_size = len(raw_cancellation_tx.serialize())
 
     return {
         "psbt": psbt,
