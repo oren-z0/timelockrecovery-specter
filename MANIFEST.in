@@ -1,5 +1,9 @@
+global-exclude *.DS_Store
+
 recursive-include src/oren-z0/specterext/timelockrecovery/templates *
+recursive-exclude src/oren-z0/specterext/timelockrecovery/templates *.DS_Store
 recursive-include src/oren-z0/specterext/timelockrecovery/static *
+recursive-exclude src/oren-z0/specterext/timelockrecovery/static *.DS_Store
 recursive-include src/oren-z0/specterext/timelockrecovery/*/LC_MESSAGES *.mo
 recursive-include src/oren-z0/specterext/timelockrecovery/translations/*/LC_MESSAGES *.po
 include requirements.txt

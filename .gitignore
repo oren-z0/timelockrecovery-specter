@@ -8,3 +8,4 @@ node_modules
 btcd-conn.json
 elmd-conn.json
 prevent_mining
+dist
