@@ -7,11 +7,13 @@ from flask import current_app as app, flash
 from flask_babel import lazy_gettext as _
 from cryptoadvance.specter.wallet import Wallet
 from embit.psbt import PSBT
+from ._version import version
 
 logger = logging.getLogger(__name__)
 
 class TimelockrecoveryService(Service):
     id = "timelockrecovery"
+    version = version
     name = "Timelock Recovery"
     icon = "timelockrecovery/img/logo160.png"
     logo = "timelockrecovery/img/logo820.png"
