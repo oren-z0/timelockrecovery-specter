@@ -27,3 +27,6 @@ classifiers =[
     'Operating System :: OS Independent',
     'Framework :: Flask',
 ]
+
+[tool.setuptools_scm]
+write_to = "src/oren-z0/specterext/timelockrecovery/_version.py"

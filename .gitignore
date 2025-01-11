@@ -9,3 +9,4 @@ btcd-conn.json
 elmd-conn.json
 prevent_mining
 dist
+src/oren-z0/specterext/timelockrecovery/_version.py
