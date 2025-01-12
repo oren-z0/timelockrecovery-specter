@@ -320,6 +320,11 @@
             doc.text("Step 3 - Broadcasting the Recovery transaction", 10, currentHeight);
             currentHeight += 8;
             doc.setFontSize(10);
+            const recoveryRawParts = (
+                (planData.recovery_raw.length < 2300)
+                ? [planData.recovery_raw]
+                : Array.from({ length: Math.ceil(planData.recovery_raw.length / 2100) }, (_, i) => planData.recovery_raw.slice(i * 2100, (i + 1) * 2100))
+            );
             const textLines4 = doc.splitTextToSize(
                 `Approximately ${planData.timelock_days} days after the Alert transaction has been confirmed, you${
                     ""
@@ -339,11 +344,6 @@
                 190,
             );
             doc.text(textLines4, 10, currentHeight);
-            const recoveryRawParts = (
-                (planData.recovery_raw.length < 2300)
-                ? [planData.recovery_raw]
-                : Array.from({ length: Math.ceil(planData.recovery_raw.length / 2100) }, (_, i) => planData.recovery_raw.slice(i * 2100, (i + 1) * 2100))
-            );
             for (const [recoveryPartIndex, recoveryRawPart] of recoveryRawParts.entries()) {
                 doc.addPage();
                 pageNumber += 1;
