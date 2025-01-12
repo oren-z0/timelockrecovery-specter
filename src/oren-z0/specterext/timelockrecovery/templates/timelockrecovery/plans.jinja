@@ -2,7 +2,7 @@
 {% block title %}Recovery Plans{% endblock %}
 {% set tab = 'plans' %}
 {% block content %}
-    <qr-code value='' width="400" id="qr-code-generator" class="hidden"></qr-code>
+    <qr-code value='' width="400" id="qr-code-generator" class="hidden" animate="off"></qr-code>
     <div class="card">
         <h2>Saved Recovery Plans</h2>
         <h3 id="no-plans" class="hidden">No recovery plans were found.</h3>
@@ -143,10 +143,11 @@
             doc.addFont("{{ url_for('static', filename='fonts/RobotoMono-Bold.ttf') }}", "Roboto", "bold");
             doc.setFont("Roboto", "normal");
             doc.setLineHeightFactor(lineHeighFactor);
+            let pageNumber = 1;
             let currentHeight = 10;
             doc.setFontSize(9);
             doc.text(
-                `Recovery-Guide  Date: ${planData.created_at}  ID: ${planData.id}  Page: 1`,
+                `Recovery-Guide  Date: ${planData.created_at}  ID: ${planData.id}  Page: ${pageNumber}`,
                 105,
                 currentHeight,
                 {align: 'center'},
@@ -194,6 +195,11 @@
             currentHeight += 8;
             doc.setFontSize(10);
             const numberOfAnchors = planData.alert_psbt_request_json.recipients.length - 1;
+            const alertRawParts = (
+                (planData.alert_raw.length < 2300)
+                ? [planData.alert_raw]
+                : Array.from({ length: Math.ceil(planData.alert_raw.length / 2100) }, (_, i) => planData.alert_raw.slice(i * 2100, (i + 1) * 2100))
+            );
             const textLines1 = doc.splitTextToSize(
                 `The first step is to broadcast the Alert transaction.${
                     ''
@@ -207,7 +213,11 @@
                                 planData.alert_psbt_request_json.recipients.slice(1).map((r) => ` • ${r.address}`).join('\n')
                             }`
                         : ` except for a small fee.`
-                }\nTo broadcast the Alert transaction, scan the QR code on page 2, and paste the content in one of the following${
+                }\nTo broadcast the Alert transaction, ${
+                    (alertRawParts.length <= 1)
+                    ? `scan the QR code on page ${pageNumber + 1},`
+                    : `scan the QR codes on pages ${pageNumber + 1}-${pageNumber + alertRawParts.length}, concatenate the contents of the QR codes (without spaces),`
+                } and paste the content in one of the following${
                     ''
                 } Bitcoin blockchain-explorer websites:\n${
                     [
@@ -222,33 +232,46 @@
             );
             doc.text(textLines1, 10, currentHeight);
 
-            doc.addPage();
-            currentHeight = 10;
-            doc.setFontSize(9);
-            doc.text(
-                `Recovery-Guide  Date: ${planData.created_at}  ID: ${planData.id}  Page: 2`,
-                105,
-                currentHeight,
-                {align: 'center'},
-            );
-            currentHeight += 10;
-            doc.setFontSize(14);
-            doc.text("Alert Transaction", 105, currentHeight, {align: 'center'});
-            currentHeight += 8;
-            doc.setFontSize(11);
-            doc.text(`Transaction Id: ${planData.alert_txid}`, 105, currentHeight, {align: 'center'});
-            currentHeight += 8;
-            doc.addImage(await getQrCodeImage(planData.alert_raw), 'PNG', 55, currentHeight, 100, 100);
-            currentHeight += 100;
-            doc.setFontSize(9);
-            const textLines2 = doc.splitTextToSize(planData.alert_raw, 192);
-            doc.text(textLines2, 9, currentHeight + 12);
+            for (const [alertPartIndex, alertRawPart] of alertRawParts.entries()) {
+                doc.addPage();
+                pageNumber += 1;
+                currentHeight = 10;
+                doc.setFontSize(9);
+                doc.text(
+                    `Recovery-Guide  Date: ${planData.created_at}  ID: ${planData.id}  Page: ${pageNumber}`,
+                    105,
+                    currentHeight,
+                    {align: 'center'},
+                );
+                currentHeight += 10;
+                doc.setFontSize(14);
+                doc.text("Alert Transaction", 105, currentHeight, {align: 'center'});
+                currentHeight += 8;
+                doc.setFontSize(11);
+                doc.text(`Transaction Id: ${planData.alert_txid}`, 105, currentHeight, {align: 'center'});
+                currentHeight += 8;
+                if (alertRawParts.length > 1) {
+                    doc.text(
+                        `Part ${alertPartIndex + 1} of ${alertRawParts.length}`,
+                        105,
+                        currentHeight,
+                        {align: 'center'},
+                    );
+                    currentHeight += 8;
+                }
+                doc.addImage(await getQrCodeImage(alertRawPart), 'PNG', 40, currentHeight, 130, 130);
+                currentHeight += 130;
+                doc.setFontSize(9);
+                const textLines2 = doc.splitTextToSize(alertRawPart, 192);
+                doc.text(textLines2, 9, currentHeight + 12);
+            }
 
             doc.addPage();
+            pageNumber += 1;
             currentHeight = 10;
             doc.setFontSize(9);
             doc.text(
-                `Recovery-Guide  Date: ${planData.created_at}  ID: ${planData.id}  Page: 3`,
+                `Recovery-Guide  Date: ${planData.created_at}  ID: ${planData.id}  Page: ${pageNumber}`,
                 105,
                 currentHeight,
                 {align: 'center'},
@@ -304,7 +327,11 @@
                     planData.recovery_recipients.length > 1 ? " destinations," : " destination,"
                 } mentioned on the first page. This can be done using the same websites mentioned in Step 1, but${
                     ""
-                } this time you will need to use QR code on page 4. If this transaction remains unconfirmed for a${
+                } this time you will need to ${
+                    recoveryRawParts.length <= 1
+                    ? `scan the QR code on page ${pageNumber + 1},`
+                    : `scan the QR codes on pages ${pageNumber + 1}-${pageNumber + recoveryRawParts.length} and concatenate their content (without spaces),`
+                }. If this transaction remains unconfirmed for a${
                     ""
                 } long time, you should use the Transaction Acceleration service mentioned on Step 2, or use the${
                     ""
@@ -312,28 +339,44 @@
                 190,
             );
             doc.text(textLines4, 10, currentHeight);
-
-            doc.addPage();
-            currentHeight = 10;
-            doc.setFontSize(9);
-            doc.text(
-                `Recovery-Guide  Date: ${planData.created_at}  ID: ${planData.id}  Page: 4`,
-                105,
-                currentHeight,
-                {align: 'center'},
+            const recoveryRawParts = (
+                (planData.recovery_raw.length < 2300)
+                ? [planData.recovery_raw]
+                : Array.from({ length: Math.ceil(planData.recovery_raw.length / 2100) }, (_, i) => planData.recovery_raw.slice(i * 2100, (i + 1) * 2100))
             );
-            currentHeight += 10;
-            doc.setFontSize(14);
-            doc.text("Recovery Transaction", 105, currentHeight, {align: 'center'});
-            currentHeight += 8;
-            doc.setFontSize(11);
-            doc.text(`Transaction Id: ${planData.recovery_txid}`, 105, currentHeight, {align: 'center'});
-            currentHeight += 8;
-            doc.addImage(await getQrCodeImage(planData.recovery_raw), 'PNG', 55, currentHeight, 100, 100);
-            currentHeight += 100;
-            doc.setFontSize(9);
-            const textLines5 = doc.splitTextToSize(planData.recovery_raw, 192);
-            doc.text(textLines5, 9, currentHeight + 12);
+            for (const [recoveryPartIndex, recoveryRawPart] of recoveryRawParts.entries()) {
+                doc.addPage();
+                pageNumber += 1;
+                currentHeight = 10;
+                doc.setFontSize(9);
+                doc.text(
+                    `Recovery-Guide  Date: ${planData.created_at}  ID: ${planData.id}  Page: ${pageNumber}`,
+                    105,
+                    currentHeight,
+                    {align: 'center'},
+                );
+                currentHeight += 10;
+                doc.setFontSize(14);
+                doc.text("Recovery Transaction", 105, currentHeight, {align: 'center'});
+                currentHeight += 8;
+                doc.setFontSize(11);
+                doc.text(`Transaction Id: ${planData.recovery_txid}`, 105, currentHeight, {align: 'center'});
+                currentHeight += 8;
+                if (recoveryRawParts.length > 1) {
+                    doc.text(
+                        `Part ${recoveryPartIndex + 1} of ${recoveryRawParts.length}`,
+                        105,
+                        currentHeight,
+                        {align: 'center'},
+                    );
+                    currentHeight += 8;
+                }
+                doc.addImage(await getQrCodeImage(recoveryRawPart), 'PNG', 40, currentHeight, 130, 130);
+                currentHeight += 130;
+                doc.setFontSize(9);
+                const textLines5 = doc.splitTextToSize(recoveryRawPart, 192);
+                doc.text(textLines5, 9, currentHeight + 12);
+            }
 
             doc.save(`timelock-recovery-guide-${planData.id}`);
         }
@@ -463,8 +506,8 @@
                 doc.setFontSize(11);
                 doc.text(`Transaction Id: ${planData.cancellation_txid}`, 105, currentHeight, {align: 'center'});
                 currentHeight += 8;
-                doc.addImage(await getQrCodeImage(planData.cancellation_raw), 'PNG', 55, currentHeight, 100, 100);
-                currentHeight += 100;
+                doc.addImage(await getQrCodeImage(planData.cancellation_raw), 'PNG', 40, currentHeight, 130, 130);
+                currentHeight += 130;
                 doc.setFontSize(9);
                 const textLines3 = doc.splitTextToSize(planData.cancellation_raw, 192);
                 doc.text(textLines3, 9, currentHeight + 12);
