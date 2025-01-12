@@ -241,8 +241,8 @@
             doc.addImage(await getQrCodeImage(planData.alert_raw), 'PNG', 55, currentHeight, 100, 100);
             currentHeight += 100;
             doc.setFontSize(9);
-            const textLines2 = doc.splitTextToSize(planData.alert_raw, 190);
-            doc.text(textLines2, 10, currentHeight + 12);
+            const textLines2 = doc.splitTextToSize(planData.alert_raw, 192);
+            doc.text(textLines2, 9, currentHeight + 12);
 
             doc.addPage();
             currentHeight = 10;
@@ -332,8 +332,8 @@
             doc.addImage(await getQrCodeImage(planData.recovery_raw), 'PNG', 55, currentHeight, 100, 100);
             currentHeight += 100;
             doc.setFontSize(9);
-            const textLines5 = doc.splitTextToSize(planData.recovery_raw, 190);
-            doc.text(textLines5, 10, currentHeight + 12);
+            const textLines5 = doc.splitTextToSize(planData.recovery_raw, 192);
+            doc.text(textLines5, 9, currentHeight + 12);
 
             doc.save(`timelock-recovery-guide-${planData.id}`);
         }
@@ -466,8 +466,8 @@
                 doc.addImage(await getQrCodeImage(planData.cancellation_raw), 'PNG', 55, currentHeight, 100, 100);
                 currentHeight += 100;
                 doc.setFontSize(9);
-                const textLines3 = doc.splitTextToSize(planData.cancellation_raw, 190);
-                doc.text(textLines3, 10, currentHeight + 12);
+                const textLines3 = doc.splitTextToSize(planData.cancellation_raw, 192);
+                doc.text(textLines3, 9, currentHeight + 12);
             } else {
                 const textLines4 = doc.splitTextToSize(
                     `In case the Alert transaction has been broadcasted, and you want to stop the funds from${
