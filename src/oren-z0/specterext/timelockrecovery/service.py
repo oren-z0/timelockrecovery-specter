@@ -62,12 +62,6 @@ class TimelockrecoveryService(Service):
         return addresses
 
     @classmethod
-    def add_prev_tx_to_psbt(cls, psbt_base64, prev_tx, input_index=0, utxo_index=0):
-        psbt = PSBT.from_base64(psbt_base64)
-        psbt.inputs[input_index].witness_utxo = prev_tx.vout[utxo_index]
-        return psbt
-
-    @classmethod
     def signhotwallet(cls, request_form, wallet):
         passphrase = request_form["passphrase"]
         psbt = json.loads(request_form["psbt"])

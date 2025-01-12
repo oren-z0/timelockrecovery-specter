@@ -560,7 +560,7 @@
 			const recoveryTransactionFeeSelectionComponent = getRecoveryTransactionFeeSelectionComponent();
 			document.getElementById('next-form-data').value = JSON.stringify({
 				alert_psbt_request_json: alertPsbtRequestJson,
-				recovery_recipients: recipientList.map((r) => ({[r.address]: r.amount / (r.unit === 'btc' ? 1 : 1e8)})),
+				recovery_recipients: recipientList.map((r) => [r.address, r.amount * (r.unit === 'btc' ? 1e8 : 1)]),
 				timelock_days: timelockDays,
 				cancellation_sats: cancellationLeftoverSats,
 			});

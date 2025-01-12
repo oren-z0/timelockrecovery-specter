@@ -9,6 +9,7 @@ from flask import current_app as app
 from flask_login import login_required, current_user
 from flask_babel import lazy_gettext as _
 from embit.transaction import Transaction, TransactionInput, TransactionOutput, Script
+from embit.psbt import PSBT
 
 from cryptoadvance.specter.specter import Specter
 from cryptoadvance.specter.services.controller import user_secret_decrypted_required
@@ -169,25 +170,31 @@ def step4_post():
     if action == "prepare":
         alert_raw = request.form["alert_raw"]
         alert_tx = Transaction.from_string(alert_raw)
-        alert_txid = alert_tx.txid().hex()
+        alert_txid = alert_tx.txid()
 
         sequence = round((request_data["timelock_days"] * 24 * 60 - (11 * 10 / 2)) * 60 / 512)
 
-        recovery_psbt = app.specter.rpc.createpsbt(
-            [{"txid": alert_txid, "vout": 0, "sequence": sequence}],
-            request_data["recovery_recipients"],
-        )
+        recovery_psbt = PSBT(Transaction(
+            version=2,
+            vin=[TransactionInput(
+                txid=alert_txid,
+                vout=0,
+                sequence=sequence,
+            )],
+            vout=[TransactionOutput(amount_sats, Script.from_address(address)) for (address, amount_sats) in request_data["recovery_recipients"]],
+            locktime=0,
+        ))
+        recovery_psbt.inputs[0].witness_utxo = alert_tx.vout[0]
 
-        recovery_psbt_base64 = TimelockrecoveryService.add_prev_tx_to_psbt(recovery_psbt, alert_tx).to_base64()
         recovery_psbt = wallet.PSBTCls(
-            recovery_psbt_base64,
+            recovery_psbt.to_base64(),
             wallet.descriptor,
             wallet.network,
             devices=list(zip(wallet.keys, wallet.devices)),
         )
 
         request_data["alert_raw"] = alert_raw
-        request_data["alert_txid"] = alert_txid
+        request_data["alert_txid"] = alert_txid.hex()
 
         return render_template(
             "timelockrecovery/step4.jinja",
@@ -238,14 +245,20 @@ def step5_post():
 
         cancellation_address = TimelockrecoveryService.get_or_reserve_addresses(wallet)[1].address
 
-        cancellation_psbt = app.specter.rpc.createpsbt(
-            [{"txid": alert_tx.txid().hex(), "vout": 0, "sequence": 0xfffffffd}],
-            [{cancellation_address: request_data['cancellation_sats'] / 1e8}],
-        )
+        cancellation_psbt = PSBT(Transaction(
+            version=2,
+            vin=[TransactionInput(
+                txid=alert_tx.txid(),
+                vout=0,
+                sequence=0xfffffffd,
+            )],
+            vout=[TransactionOutput(request_data['cancellation_sats'], Script.from_address(cancellation_address))],
+            locktime=0,
+        ))
+        cancellation_psbt.inputs[0].witness_utxo = alert_tx.vout[0]
 
-        cancellation_psbt_base64 = TimelockrecoveryService.add_prev_tx_to_psbt(cancellation_psbt, alert_tx).to_base64()
         cancellation_psbt = wallet.PSBTCls(
-            cancellation_psbt_base64,
+            cancellation_psbt.to_base64(),
             wallet.descriptor,
             wallet.network,
             devices=list(zip(wallet.keys, wallet.devices)),
