@@ -378,7 +378,7 @@
                 doc.text(textLines5, 9, currentHeight + 12);
             }
 
-            doc.save(`timelock-recovery-guide-${planData.id}`);
+            doc.save(`timelock-recovery-plan-${planData.id}`);
         }
 
         async function downloadCancellationPdf(planId) {
@@ -522,7 +522,7 @@
                 );
                 doc.text(textLines4, 10, currentHeight);
             }
-            doc.save(`timelock-recovery-plan-${planData.id}`);
+            doc.save(`timelock-recovery-cancellation-guide-${planData.id}`);
         }
 
         let asyncQueue = Promise.resolve();
