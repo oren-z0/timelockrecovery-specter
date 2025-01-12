@@ -156,8 +156,11 @@
             currentHeight += 27;
             doc.setFontSize(18);
             doc.text("Timelock-Recovery Guide", 105, currentHeight, {align: 'center'});
-            currentHeight += 8;
+            currentHeight += 6;
             doc.setFontSize(10);
+            doc.text("v{{ service.version }}", 105, currentHeight, {align: 'center'});
+            currentHeight += 10;
+            console.log("recovery_recipients", planData.recovery_recipients);
             const textLines0 = doc.splitTextToSize(
                 `This document will guide you through the process of recovering the funds on wallet: ${
                     walletName
@@ -167,9 +170,7 @@
                     : "amount to the following address:"
                 }\n${
                     planData.recovery_recipients.map(
-                        r => Object.entries(r),
-                    ).map(
-                        ([[address, amount]]) => `• ${address}: ${amount.toFixed(8)} BTC`,
+                        ([address, amount]) => `• ${address}: ${(amount / 1e8).toFixed(8)} BTC`,
                     ).join('\n')
                 }\nBefore proceeding, MAKE SURE THAT YOU HAVE ACCESS TO THE ${
                     planData.recovery_recipients.length > 1
@@ -381,8 +382,10 @@
             currentHeight += 10;
             doc.setFontSize(18);
             doc.text("Timelock-Recovery Cancellation Guide", 105, currentHeight, {align: 'center'});
-            currentHeight += 10;
+            currentHeight += 8;
             doc.setFontSize(10);
+            doc.text("v{{ service.version }}", 105, currentHeight, {align: 'center'});
+            currentHeight += 10;
             const textLines0 = doc.splitTextToSize(
                 `This document is intended solely for the eyes of the owner of wallet: ${
                     walletName
