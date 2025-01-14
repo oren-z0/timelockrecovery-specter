@@ -173,6 +173,10 @@ def step4_post():
         alert_txid = alert_tx.txid()
 
         sequence = round((request_data["timelock_days"] * 24 * 60 - (11 * 10 / 2)) * 60 / 512)
+        if sequence > 0xFFFF:
+            # Safety check - not expected to happen due to frontend validation
+            raise SpecterError("Sequence number is too large")
+        sequence += 0x00400000 # time based lock instead of block-height based lock
 
         recovery_psbt = PSBT(Transaction(
             version=2,
