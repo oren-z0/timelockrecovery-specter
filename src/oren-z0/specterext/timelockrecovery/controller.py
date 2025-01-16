@@ -172,7 +172,7 @@ def step4_post():
         alert_tx = Transaction.from_string(alert_raw)
         alert_txid = alert_tx.txid()
 
-        sequence = round((request_data["timelock_days"] * 24 * 60 - (11 * 10 / 2)) * 60 / 512)
+        sequence = round(request_data["timelock_days"] * 24 * 60 * 60 / 512)
         if sequence > 0xFFFF:
             # Safety check - not expected to happen due to frontend validation
             raise SpecterError("Sequence number is too large")
