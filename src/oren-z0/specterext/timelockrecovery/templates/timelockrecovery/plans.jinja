@@ -334,7 +334,7 @@
                     ""
                 } this time you will need to ${
                     recoveryRawParts.length <= 1
-                    ? `scan the QR code on page ${pageNumber + 1},`
+                    ? `scan the QR code on page ${pageNumber + 1}`
                     : `scan the QR codes on pages ${pageNumber + 1}-${pageNumber + recoveryRawParts.length} and concatenate their content (without spaces),`
                 }. If this transaction remains unconfirmed for a${
                     ""
@@ -469,7 +469,7 @@
                         ""
                     } leaving this wallet, you can scan the QR code on page 2, and broadcast${
                         ""
-                    } the content using one of the following Bitcoin blockchain-explorer websites:${
+                    } the content using one of the following Bitcoin blockchain-explorer websites:\n${
                         [
                             "https://mempool.space/tx/push",
                             "https://blockstream.info/tx/push",
