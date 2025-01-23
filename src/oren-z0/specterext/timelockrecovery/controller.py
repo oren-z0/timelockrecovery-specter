@@ -41,6 +41,16 @@ def verify_not_liquid():
     if app.specter.is_liquid:
         raise SpecterError("Timelock Recovery does not support Liquid")
 
+def verify_wallet(wallet):
+    if not wallet:
+        raise SpecterError(
+            "Wallet could not be loaded. Are you connected with Bitcoin Core?"
+        )
+    if wallet.address_type == "legacy":
+        raise SpecterError(
+            "Timelock Recovery does not support wallets of legacy addresses. Please use a segwit wallet."
+        )
+
 
 @timelockrecovery_endpoint.route("/")
 @login_required
@@ -76,11 +86,8 @@ def step1_get():
 def step2():
     verify_not_liquid()
     wallet_alias = request.args.get('wallet')
-    wallet: Wallet = current_user.wallet_manager.get_by_alias(wallet_alias)
-    if not wallet:
-        raise SpecterError(
-            "Wallet could not be loaded. Are you connected with Bitcoin Core?"
-        )
+    wallet = current_user.wallet_manager.get_by_alias(wallet_alias)
+    verify_wallet(wallet)
     # update balances in the wallet
     wallet.update_balance()
     # update utxo list for coin selection
@@ -102,11 +109,8 @@ def step2():
 def step3_post():
     verify_not_liquid()
     wallet_alias = request.args.get('wallet')
-    wallet: Wallet = current_user.wallet_manager.get_by_alias(wallet_alias)
-    if not wallet:
-        raise SpecterError(
-            "Wallet could not be loaded. Are you connected with Bitcoin Core?"
-        )
+    wallet = current_user.wallet_manager.get_by_alias(wallet_alias)
+    verify_wallet(wallet)
     # update balances in the wallet
     wallet.update_balance()
     # update utxo list for coin selection
@@ -158,11 +162,8 @@ def step3_get():
 def step4_post():
     verify_not_liquid()
     wallet_alias = request.args.get('wallet')
-    wallet: Wallet = current_user.wallet_manager.get_by_alias(wallet_alias)
-    if not wallet:
-        raise SpecterError(
-            "Wallet could not be loaded. Are you connected with Bitcoin Core?"
-        )
+    wallet = current_user.wallet_manager.get_by_alias(wallet_alias)
+    verify_wallet(wallet)
 
     action = request.form.get("action")
     request_data = json.loads(request.form["request_data"])
@@ -235,11 +236,8 @@ def step4_get():
 def step5_post():
     verify_not_liquid()
     wallet_alias = request.args.get('wallet')
-    wallet: Wallet = current_user.wallet_manager.get_by_alias(wallet_alias)
-    if not wallet:
-        raise SpecterError(
-            "Wallet could not be loaded. Are you connected with Bitcoin Core?"
-        )
+    wallet = current_user.wallet_manager.get_by_alias(wallet_alias)
+    verify_wallet(wallet)
 
     action = request.form.get("action")
     request_data = json.loads(request.form["request_data"])
@@ -307,11 +305,8 @@ def step5_get():
 def step6_post():
     verify_not_liquid()
     wallet_alias = request.args.get('wallet')
-    wallet: Wallet = current_user.wallet_manager.get_by_alias(wallet_alias)
-    if not wallet:
-        raise SpecterError(
-            "Wallet could not be loaded. Are you connected with Bitcoin Core?"
-        )
+    wallet = current_user.wallet_manager.get_by_alias(wallet_alias)
+    verify_wallet(wallet)
     plan_id = str(uuid.uuid4())
     request_data = json.loads(request.form["request_data"])
     cancellation_raw = request.form.get("cancellation_raw", "")
