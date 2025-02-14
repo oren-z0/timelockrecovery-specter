@@ -165,7 +165,7 @@
 		const specterUnit = "{% if specter.unit == 'sat' %}sats{% else %}{% if specter.is_testnet %}t{%endif%}BTC{% endif %}";
 		const anchorOutputAmountSats = 600;
 		// 0xFFFF * 512 seconds = 388.36 days.
-		const maxLocktimeDatys = 388;
+		const maxLocktimeDays = 388;
 
 		function getAnchorAddresses() {
 			if (document.getElementById('different-anchor-addresses-checkbox').checked) {
@@ -549,8 +549,8 @@
 				}
 			}
 			const timelockDays = Number(document.getElementById('timelock-days').value);
-			if (Number.isNaN(timelockDays) || !Number.isSafeInteger(timelockDays) || timelockDays < 2 || timelockDays > maxLocktimeDatys) {
-				showError(`Timelock days must be an integer between 2 and ${maxLocktimeDatys}`, 5000);
+			if (Number.isNaN(timelockDays) || !Number.isSafeInteger(timelockDays) || timelockDays < 2 || timelockDays > maxLocktimeDays) {
+				showError(`Timelock days must be an integer between 2 and ${maxLocktimeDays}`, 5000);
 				return;
 			}
 			if (cancellationLeftoverSats < anchorOutputAmountSats) {
