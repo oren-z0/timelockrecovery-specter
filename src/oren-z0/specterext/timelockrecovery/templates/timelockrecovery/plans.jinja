@@ -90,24 +90,6 @@
             return document.getElementById('qr-code-generator').el.children[1].src;
         }
 
-        const lineMaxChars = 94;
-
-        function splitLines(text) {
-            const lines = [];
-            const words = text.split(/\s/g);
-            let lastLine = undefined;
-            for (const word of words) {
-                const newLine = `${lastLine === undefined ? '' : `${lastLine} `}${word}`;
-                if (newLine.length <= lineMaxChars) {
-                    lastLine = newLine;
-                } else {
-                    lines.push(lastLine);
-                    lastLine = `${word}`;
-                }
-            }
-            return lines.join('\n') + lastLine;
-        }
-
         const lineHeighFactor = 1.5;
 
         async function downloadRecoveryPdf(planId) {

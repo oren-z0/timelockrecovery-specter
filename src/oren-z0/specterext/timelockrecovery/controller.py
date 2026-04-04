@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 import random
 import json
@@ -356,6 +356,7 @@ def step6_post():
     request_data["cancellation_txid"] = "" if cancellation_raw == "" else Transaction.from_string(cancellation_raw).txid().hex()
     request_data["wallet_alias"] = wallet_alias
     request_data["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    request_data["created_at_utc"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     request_data["id"] = plan_id
 
     plans = TimelockrecoveryService.get_recovery_plans()
