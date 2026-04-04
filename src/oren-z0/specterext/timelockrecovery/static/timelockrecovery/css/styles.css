@@ -153,3 +153,22 @@ input.alert-button:disabled {
     --tw-text-opacity: 1;
     color: rgb(107 114 128 / var(--tw-text-opacity));
 }
+
+.plan-text {
+    vertical-align: top;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+}
+
+.plan-action-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.plan-action-row {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 0.35rem;
+}

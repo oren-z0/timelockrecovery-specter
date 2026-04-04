@@ -18,18 +18,25 @@
                 <tbody>
                     {% for plan in plans %}
                     <tr id="row-{{ plan['id'] }}">
-                        <td>{{ plan["created_at"] }}</td>
-                        <td>{% if plan.get("wallet", None) %} {{plan["wallet"].name}} {% else %} {{plan["wallet_alias"]}} {% endif %}</td>
-                        <td>
-                            <button class="download-recovery-button btn bg-dark-600" data-planid="{{ plan['id'] }}" >
-                                Download Recovery Guide
-                            </button>
-                            <button class="download-cancellation-button btn bg-dark-600" data-planid="{{ plan['id'] }}" >
-                                Download Cancellation Guide
-                            </button>
-                            <button class="delete-button btn bg-red-600" data-planid="{{ plan['id'] }}" >
-                                Delete
-                            </button>
+                        <td class="plan-text">{{ plan["created_at"] }}</td>
+                        <td class="plan-text">{% if plan.get("wallet", None) %} {{plan["wallet"].name}} {% else %} {{plan["wallet_alias"]}} {% endif %}</td>
+                        <td class="plan-action-rows">
+                            <div class="plan-action-row">
+                                <button class="download-recovery-button btn bg-dark-600" data-planid="{{ plan['id'] }}" >
+                                    Download Recovery Guide
+                                </button>
+                                <button class="download-bip128-button btn bg-dark-600" data-planid="{{ plan['id'] }}" >
+                                    Download BIP-128 JSON
+                                </button>
+                            </div>
+                            <div class="plan-action-row">
+                                <button class="download-cancellation-button btn bg-dark-600" data-planid="{{ plan['id'] }}" >
+                                    Download Cancellation Guide
+                                </button>
+                                <button class="delete-button btn bg-red-600" data-planid="{{ plan['id'] }}" >
+                                    Delete
+                                </button>
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}
@@ -88,6 +95,173 @@
             document.getElementById('qr-code-generator').setAttribute('value', value);
             await new Promise((resolve) => setTimeout(resolve, 10));
             return document.getElementById('qr-code-generator').el.children[1].src;
+        }
+
+        const bip128ChecksumPrefixLength = 8;
+
+        function toBip128Json(planData) {
+            if (!planData || typeof planData !== "object") {
+                throw new Error("Invalid plan data");
+            }
+            if (!planData.alert_raw || !planData.recovery_raw) {
+                throw new Error("Missing raw transactions in plan data");
+            }
+
+            const alertWeight = Number(planData.alert_weight);
+            const recoveryWeight = Number(planData.recovery_weight);
+            const alertFee = Number(planData.alert_fee);
+            const recoveryFee = Number(planData.recovery_fee);
+            if (!Array.isArray(planData.alert_inputs) || planData.alert_inputs.length === 0) {
+                throw new Error("Missing alert_inputs");
+            }
+            if (!Number.isFinite(alertWeight) || alertWeight <= 0) {
+                throw new Error("Missing or invalid alert_weight");
+            }
+            if (!Number.isFinite(recoveryWeight) || recoveryWeight <= 0) {
+                throw new Error("Missing or invalid recovery_weight");
+            }
+            if (!Number.isFinite(alertFee) || alertFee < 0) {
+                throw new Error("Missing or invalid alert_fee");
+            }
+            if (!Number.isFinite(recoveryFee) || recoveryFee < 0) {
+                throw new Error("Missing or invalid recovery_fee");
+            }
+
+            const recipients = planData.alert_psbt_request_json?.recipients;
+            if (!Array.isArray(recipients) || recipients.length < 1) {
+                throw new Error("Missing alert recipients");
+            }
+            const [alertRecipient, ...anchorRecipients] = recipients;
+            if (!alertRecipient?.address) {
+                throw new Error("Missing alert address");
+            }
+            const anchorAmountSats = anchorRecipients.length > 0
+                ? Number(anchorRecipients[0].amount)
+                : 600;
+            if (!Number.isSafeInteger(anchorAmountSats) || anchorAmountSats < 0) {
+                throw new Error("Invalid anchor amount");
+            }
+
+            if (!Array.isArray(planData.recovery_recipients) || planData.recovery_recipients.length === 0) {
+                throw new Error("Missing recovery recipients");
+            }
+            const recoveryOutputs = planData.recovery_recipients.map((recipient) => {
+                if (!Array.isArray(recipient) || recipient.length < 2) {
+                    throw new Error("Invalid recovery recipient");
+                }
+                const [address, amountSats] = recipient;
+                const parsedAmount = Number(amountSats);
+                if (!address || !Number.isSafeInteger(parsedAmount) || parsedAmount <= 0) {
+                    throw new Error("Invalid recovery recipient amount/address");
+                }
+                return [address, parsedAmount];
+            });
+
+            const alertInputs = planData.alert_inputs.map((entry) => String(entry));
+
+            return {
+                kind: "timelock-recovery-plan",
+                id: String(planData.id),
+                name: `Recovery Plan ${planData.id}`,
+                description: `Recovery plan for wallet ${planData.wallet_name || planData.wallet_alias}`.slice(0, 200),
+                created_at: String(planData.created_at_utc),
+                plugin_version: "{{ service.version }}",
+                wallet_version: "{{ specter.version.current }}",
+                wallet_kind: "Specter Desktop",
+                wallet_name: "Specter Desktop",
+                timelock_days: Number(planData.timelock_days),
+                anchor_amount_sats: anchorAmountSats,
+                anchor_addresses: anchorRecipients.map((recipient) => recipient.address),
+                alert_address: alertRecipient.address,
+                alert_inputs: alertInputs,
+                alert_tx: String(planData.alert_raw).toUpperCase(),
+                alert_txid: String(planData.alert_txid).toLowerCase(),
+                alert_fee: alertFee,
+                alert_weight: alertWeight,
+                recovery_tx: String(planData.recovery_raw).toUpperCase(),
+                recovery_txid: String(planData.recovery_txid).toLowerCase(),
+                recovery_fee: recoveryFee,
+                recovery_weight: recoveryWeight,
+                recovery_outputs: recoveryOutputs,
+            };
+        }
+
+        async function appendBip128Checksum(bip128Json) {
+            const result = { ...bip128Json };
+            delete result.checksum;
+            const checksumData = new TextEncoder().encode(
+                JSON.stringify(Object.entries(result).sort()),
+            );
+            const checksumHashBuffer = new Uint8Array(await crypto.subtle.digest("SHA-256", checksumData));
+            result.checksum =  Array.from(checksumHashBuffer, (byte) => byte.toString(16).padStart(2, "0")).join("").slice(0, bip128ChecksumPrefixLength);
+            return result;
+        }
+
+        function triggerJsonDownload(filename, jsonContent) {
+            const blob = new Blob([`${JSON.stringify(jsonContent, null, 2)}\n`], {
+                type: "application/json",
+            });
+            const objectUrl = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = objectUrl;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(objectUrl);
+        }
+
+        async function downloadBip128Json(planId) {
+            let planData = undefined;
+            try {
+                const fetchResult = await fetch(
+                    "{{ url_for(service.get_blueprint_name() + '.plan_get', plan_id='') }}" + encodeURIComponent(planId),
+                    {
+                        signal: AbortSignal.timeout(5000),
+                        method: 'GET',
+                        headers: {
+                                'accept': 'application/json',
+                                'content-type': 'application/json',
+                                'x-csrftoken': "{{ csrf_token() }}",
+                        },
+                    },
+                );
+                if (fetchResult.ok) {
+                    planData = (await fetchResult.json()).plan;
+                }
+            } catch (err) {
+                console.error("GET fetch failed", err);
+            }
+            if (!planData) {
+                showError(`{{ _("Failed to download BIP-128 JSON.") }}`, 5000);
+                return;
+            }
+
+            const minVersionParts = [0, 2, 0];
+            const planVersionParts = String(planData.extension_version ?? "").split(".").map((s) => parseInt(s, 10) || 0);
+            let versionOk = true;
+            for (let i = 0; i < minVersionParts.length; i += 1) {
+                const planPart = planVersionParts[i] ?? 0;
+                if (planPart > minVersionParts[i]) {
+                    break;
+                }
+                if (planPart < minVersionParts[i]) {
+                    versionOk = false;
+                    break;
+                }
+            }
+            if (!versionOk) {
+                showError(`{{ _("BIP-128 export is supported only for recovery-plans that were created with extension version 0.2.0 or newer.") }}`, 8000);
+                return;
+            }
+
+            try {
+                const bip128Json = await appendBip128Checksum(toBip128Json(planData));
+                triggerJsonDownload(`timelock-recovery-plan-${planData.id}.json`, bip128Json);
+            } catch (err) {
+                console.error("Failed to build BIP-128 JSON", err);
+                showError(`{{ _("Failed to build BIP-128 JSON.") }}`, 5000);
+            }
         }
 
         const lineHeighFactor = 1.5;
@@ -521,12 +695,21 @@
             });
         }
 
+        function handleDownloadBip128Json(event) {
+            asyncQueue = asyncQueue.then(() => downloadBip128Json(event.target.getAttribute('data-planid'))).catch((err) => {
+                console.error("Failed to download BIP-128 JSON", err);
+            });
+        }
+
         document.addEventListener("DOMContentLoaded", async () => {
             for (const button of document.querySelectorAll('.delete-button')) {
                 button.addEventListener("click", handleDelete);
             }
             for (const button of document.querySelectorAll('.download-recovery-button')) {
                 button.addEventListener("click", handleDownloadRecovery);
+            }
+            for (const button of document.querySelectorAll('.download-bip128-button')) {
+                button.addEventListener("click", handleDownloadBip128Json);
             }
             for (const button of document.querySelectorAll('.download-cancellation-button')) {
                 button.addEventListener("click", handleDownloadCancellation);
@@ -544,6 +727,7 @@
                     try {
                         await downloadRecoveryPdf(planId);
                         await downloadCancellationPdf(planId);
+                        await downloadBip128Json(planId);
                         urlParams.delete('plan');
                         history.replaceState(
                             null,
