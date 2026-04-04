@@ -45,9 +45,9 @@ def verify_wallet(wallet):
         raise SpecterError(
             "Wallet could not be loaded. Are you connected with Bitcoin Core?"
         )
-    if wallet.address_type == "legacy":
+    if wallet.address_type != "bech32":
         raise SpecterError(
-            "Timelock Recovery does not support wallets of legacy addresses. Please use a segwit wallet."
+            "Timelock Recovery extension only supports native-segwit wallets."
         )
 
 
