@@ -1,7 +1,7 @@
 import json
 import logging
 
-from cryptoadvance.specter.services.service import Service, devstatus_alpha
+from cryptoadvance.specter.services.service import Service, devstatus_prod
 from cryptoadvance.specter.specter_error import handle_exception
 from flask import current_app as app, flash
 from flask_babel import lazy_gettext as _
@@ -22,7 +22,7 @@ class TimelockrecoveryService(Service):
     blueprint_module = "oren-z0.specterext.timelockrecovery.controller"
     encrypt_data = True
 
-    devstatus = devstatus_alpha
+    devstatus = devstatus_prod
     isolated_client = False
 
     # TODO: As more Services are integrated, we'll want more robust categorization and sorting logic
