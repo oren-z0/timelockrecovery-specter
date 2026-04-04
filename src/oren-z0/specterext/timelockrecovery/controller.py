@@ -13,7 +13,6 @@ from embit.psbt import PSBT
 
 from cryptoadvance.specter.specter import Specter
 from cryptoadvance.specter.services.controller import user_secret_decrypted_required
-from cryptoadvance.specter.user import User
 from cryptoadvance.specter.wallet import Wallet
 from cryptoadvance.specter.specter_error import SpecterError, handle_exception
 from cryptoadvance.specter.commands.psbt_creator import PsbtCreator
@@ -51,6 +50,33 @@ def verify_wallet(wallet):
             "Timelock Recovery does not support wallets of legacy addresses. Please use a segwit wallet."
         )
 
+
+def _alert_input_total_sats_from_psbt(psbt: dict) -> int:
+    """
+    PsbtCreator.create_psbt() returns SpecterPSBT.to_dict() (Specter Desktop).
+    Input dicts include integer ``sat_amount`` (and matching ``float_amount``) when the
+    UTXO is known — see ``SpecterScope.to_dict`` / ``SpecterInputScope`` in
+    https://github.com/cryptoadvance/specter-desktop/blob/master/src/cryptoadvance/specter/util/psbt.py
+    """
+    inputs = psbt.get("inputs") or []
+    if inputs and all(inp.get("sat_amount") for inp in inputs):
+        total = sum(int(inp["sat_amount"]) for inp in inputs)
+        if total > 0:
+            return total
+    raise SpecterError("Cannot derive alert input total from PSBT")
+
+def transaction_weight(tx: Transaction, txsize: int) -> int:
+    """
+    BIP-141 weight from serialized byte length and a parsed Transaction (embit).
+    Inspired from cryptoadvance.specter.util.tx transaction_weight.
+    """
+    if tx.is_segwit:
+        non_witness_size = txsize - 2 - sum(
+            len(inp.witness.serialize()) for inp in tx.vin
+        )
+        witness_size = txsize - non_witness_size
+        return non_witness_size * 4 + witness_size
+    return txsize * 4
 
 @timelockrecovery_endpoint.route("/")
 @login_required
@@ -118,6 +144,7 @@ def step3_post():
 
     action = request.form.get("action")
     request_data = json.loads(request.form["request_data"])
+    request_data["extension_version"] = TimelockrecoveryService.version
 
     if action == "prepare":
         psbt_creator = PsbtCreator(
@@ -125,6 +152,7 @@ def step3_post():
         )
         psbt_creator.kwargs["readonly"] = True
         psbt = psbt_creator.create_psbt(wallet)
+        request_data["alert_input_total_sats"] = _alert_input_total_sats_from_psbt(psbt)
 
         return render_template(
             "timelockrecovery/step3.jinja",
@@ -200,6 +228,13 @@ def step4_post():
 
         request_data["alert_raw"] = alert_raw
         request_data["alert_txid"] = alert_txid.hex()
+        request_data["alert_inputs"] = [f"{inp.txid.hex()}:{inp.vout}" for inp in alert_tx.vin]
+        request_data["alert_weight"] = transaction_weight(
+            alert_tx, len(alert_raw) // 2
+        )
+        request_data["alert_fee"] = int(request_data["alert_input_total_sats"]) - sum(
+            o.value for o in alert_tx.vout
+        )
 
         return render_template(
             "timelockrecovery/step4.jinja",
@@ -267,8 +302,15 @@ def step5_post():
         )
 
         recovery_raw = request.form["recovery_raw"]
+        recovery_tx = Transaction.from_string(recovery_raw)
         request_data["recovery_raw"] = recovery_raw
-        request_data["recovery_txid"] = Transaction.from_string(recovery_raw).txid().hex()
+        request_data["recovery_txid"] = recovery_tx.txid().hex()
+        request_data["recovery_fee"] = alert_tx.vout[0].value - sum(
+            o.value for o in recovery_tx.vout
+        )
+        request_data["recovery_weight"] = transaction_weight(
+            recovery_tx, len(recovery_raw) // 2
+        )
 
         return render_template(
             "timelockrecovery/step5.jinja",
