@@ -317,7 +317,6 @@
             doc.setFontSize(10);
             doc.text("v{{ service.version }}", 105, currentHeight, {align: 'center'});
             currentHeight += 10;
-            console.log("recovery_recipients", planData.recovery_recipients);
             const textLines0 = doc.splitTextToSize(
                 `This document will guide you through the process of recovering the funds on wallet: ${
                     walletName
