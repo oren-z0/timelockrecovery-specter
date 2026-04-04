@@ -9,4 +9,4 @@ An extension for [Specter Desktop](https://github.com/cryptoadvance/specter-desk
 PyPi package: [specterext-timelockrecovery](https://pypi.org/project/specterext-timelockrecovery)
 
 ## Watch the video (demo starts at 12:08):
-[![Watch the video](https://files.niot.space/iinTjzc6TF4uAUj9.png)](https://niot.space/a3JwIlQqwcb8WLEe.mp4)
+[![Watch the video](https://files.niot.space/iinTjzc6TF4uAUj9.png)](https://files.niot.space/a3JwIlQqwcb8WLEe.mp4)
