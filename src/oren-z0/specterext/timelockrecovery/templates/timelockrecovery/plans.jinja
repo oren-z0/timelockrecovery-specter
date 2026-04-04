@@ -149,12 +149,12 @@
                 if (!Array.isArray(recipient) || recipient.length < 2) {
                     throw new Error("Invalid recovery recipient");
                 }
-                const [address, amountSats] = recipient;
+                const [address, amountSats, label] = recipient;
                 const parsedAmount = Number(amountSats);
                 if (!address || !Number.isSafeInteger(parsedAmount) || parsedAmount <= 0) {
                     throw new Error("Invalid recovery recipient amount/address");
                 }
-                return [address, parsedAmount];
+                return [address, parsedAmount, (label || '').slice(0, 200)];
             });
 
             const alertInputs = planData.alert_inputs.map((entry) => String(entry));
@@ -326,7 +326,9 @@
                     : "amount to the following address:"
                 }\n${
                     planData.recovery_recipients.map(
-                        ([address, amount]) => `• ${address}: ${(amount / 1e8).toFixed(8)} BTC`,
+                        ([address, amount, label]) => `• ${address}: ${(amount / 1e8).toFixed(8)} BTC${
+                            label ? `\n  (${label.slice(0, 85)})` : ''
+                        }`,
                     ).join('\n')
                 }\nBefore proceeding, MAKE SURE THAT YOU HAVE ACCESS TO THE ${
                     planData.recovery_recipients.length > 1

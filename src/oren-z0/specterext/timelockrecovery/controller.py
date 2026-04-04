@@ -214,7 +214,7 @@ def step4_post():
                 vout=0,
                 sequence=sequence,
             )],
-            vout=[TransactionOutput(amount_sats, Script.from_address(address)) for (address, amount_sats) in request_data["recovery_recipients"]],
+            vout=[TransactionOutput(amount_sats, Script.from_address(address)) for (address, amount_sats, _label) in request_data["recovery_recipients"]],
             locktime=0,
         ))
         recovery_psbt.inputs[0].witness_utxo = alert_tx.vout[0]
