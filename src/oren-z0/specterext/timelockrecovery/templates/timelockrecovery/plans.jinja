@@ -43,7 +43,7 @@
                 </tbody>
             </table>
             <div>
-                Recovery plans could still be broadcasted to the blockchain even if you
+                Recovery plans could still be broadcast to the blockchain even if you
                 delete them from this table. You should print a hard-copy of each PDF,
                 and if you wish you can also keep a digital copy here.
             </div>
@@ -594,7 +594,7 @@
                     : "a different wallet"
                 } within ${planData.timelock_days} days. To prevent this from happening accidentally or maliciously by someone${
                     ""
-                } who found that document, you should periodically check if the Alert transaction has been broadcasted, using${
+                } who found that document, you should periodically check if the Alert transaction has been broadcast, using${
                     ""
                 } a Bitcoin block-explorer website such as:\n`,
                 190,
@@ -613,7 +613,7 @@
             const textLines1 = doc.splitTextToSize(
                 `It is also recommended to use a Watch-Tower service that will notify you immediately if the${
                     ''
-                } Alert transaction has been broadcasted. For more details, visit: https://timelockrecovery.com .`,
+                } Alert transaction has been broadcast. For more details, visit: https://timelockrecovery.com .`,
                 190,
             );
             doc.text(textLines1, 10, currentHeight);
@@ -621,7 +621,7 @@
 
             if (planData.cancellation_txid) {
                 const textLines2 = doc.splitTextToSize(
-                    `In case the Alert transaction has been broadcasted, and you want to stop the funds from${
+                    `In case the Alert transaction has been broadcast, and you want to stop the funds from${
                         ""
                     } leaving this wallet, you can scan the QR code on page 2, and broadcast${
                         ""
@@ -669,7 +669,7 @@
                 doc.text(textLines3, 9, currentHeight + 12);
             } else {
                 const textLines4 = doc.splitTextToSize(
-                    `In case the Alert transaction has been broadcasted, and you want to stop the funds from${
+                    `In case the Alert transaction has been broadcast, and you want to stop the funds from${
                         ""
                     } leaving this wallet (by the Recovery transaction), you should move its funds to a new wallet${
                         ""

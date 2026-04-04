@@ -21,7 +21,7 @@
 			If signing transactions on this wallet is complicated (i.e. it depends on a multisig
 			of devices hidden in multiple geographic locations), signing this transaction
 			in advance can be useful in time of emergency - like in case the Alert transaction
-			was exposed and broadcasted by someone malicious, and you have {{ request_data["timelock_days"] }}
+			was exposed and broadcast by someone malicious, and you have {{ request_data["timelock_days"] }}
 			days the cancel the process.
 		</p>
 		<div id="tx-info-wrapper">
@@ -220,7 +220,7 @@
 	<label class="checkbox-wrapper-inline checkbox-wrapper-long-label">
 		<input type="checkbox" class="checkbox-input" id="skip-cancellation-transaction">
 		<span class="checkbox-label">
-			Skip the Cancellation transaction. If the Alert transaction is exposed and broadcasted by
+			Skip the Cancellation transaction. If the Alert transaction is exposed and broadcast by
 			someone malicious, I will have enough time ({{ request_data["timelock_days"] }} days) to
 			open wallet {{ wallet.name }} and send the funds somewhere else (which could even be an address on
 			the same wallet).
