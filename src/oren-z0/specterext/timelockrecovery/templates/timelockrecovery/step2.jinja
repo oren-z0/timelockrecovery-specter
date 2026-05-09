@@ -218,7 +218,7 @@
 					recipients: [
 						{
 							address: "{{ reserved_address.address }}",
-							amount: (Math.floor(Number(amountAvailable) * 1e8) - anchorOutputAmountSats * anchorAddresses.length),
+							amount: Math.round(Number(amountAvailable) * 1e8) - anchorOutputAmountSats * anchorAddresses.length,
 							unit: "sat",
 							label: "{{ reserved_address.label }}"
 						},
@@ -310,7 +310,7 @@
 			lastRecipient.amount = "";
 			const recoveryFee = getRecoveryTransactionFeeSelectionComponent().selectedFee();
 			const cancellationFee = getCancellationTransactionFeeSelectionComponent().selectedFee();
-			const firstRecipientSats = recipientList.slice(0, -1).map((r) => r.amount * (r.unit === 'btc' ? 1e8 : 1))
+			const firstRecipientSats = recipientList.slice(0, -1).map((r) => Math.round(r.amount * (r.unit === 'btc' ? 1e8 : 1)))
 			if (
 				recoveryFee === "" ||
 				cancellationFee === "" ||
@@ -521,7 +521,7 @@
 						return;
 					}
 				}
-				const amountSats = recipient.amount * (recipient.unit === 'btc' ? 1e8 : 1);
+				const amountSats = Math.round(recipient.amount * (recipient.unit === 'btc' ? 1e8 : 1));
 				if (Number.isNaN(amountSats) || (amountSats < anchorOutputAmountSats)) {
 					showError(
 						`Recipient ${recipientIndex}'s amount is less than ${
