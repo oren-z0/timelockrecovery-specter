@@ -356,24 +356,15 @@
 			return "Reason could be recipient addresses, not enough funds or something else.";
 		}
 
-		function validateAddress(address, doShowError=false) {
+		function validateAddress(address) {
 			if (!address) {
-				if (doShowError) {
-					showError(`{{ _("You provided no address.") }}`, 5000);
-				}
 				return false;
 			}
 			// Segwit addresses are always between 14 and 74 characters long.
 			if (address.length < 14) {
-				if (doShowError) {
-					showError(`{{ _("Please provide a valid address!") }}`, 5000);
-				}
 				return false;
 			}
 			if (/\s/.test(address)) {
-				if (doShowError) {
-					showError(`{{ _("Looks like there are whitespaces in the address field.") }}`, 5000);
-				}
 				return false;
 			}
 			return true;
