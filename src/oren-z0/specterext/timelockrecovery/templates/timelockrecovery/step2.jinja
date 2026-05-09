@@ -423,6 +423,12 @@
 				removeRecipient(newRecipient.recipientId);
 			});
 			newRecipient.addressElement.addEventListener('input', (event) => {
+				const address = newRecipient.addressElement.value;
+				const lowercaseAddress = address.toLowerCase();
+				if (address !== lowercaseAddress && (lowercaseAddress.startsWith('bc1') || lowercaseAddress.startsWith('tb1'))) {
+					// bech32 addresses should be converted to lowercase
+					newRecipient.addressElement.value = lowercaseAddress;
+				}
 				simulateAlertTransaction();
 			});
 			newRecipient.labelElement.addEventListener('input', () => {
