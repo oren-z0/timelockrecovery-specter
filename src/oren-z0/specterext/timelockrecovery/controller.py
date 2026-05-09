@@ -78,6 +78,29 @@ def transaction_weight(tx: Transaction, txsize: int) -> int:
         return non_witness_size * 4 + witness_size
     return txsize * 4
 
+def fill_alert_output_as_input_metadata(wallet: Wallet, psbt: PSBT, alert_tx: Transaction):
+    alert_output = alert_tx.vout[0]
+    psbt.inputs[0].witness_utxo = alert_output
+    alert_address = TimelockrecoveryService.get_or_reserve_addresses(wallet)[0].address
+    alert_descriptor = wallet.get_descriptor(address=alert_address)
+    if not wallet.PSBTCls.fill_output(psbt.inputs[0], alert_descriptor):
+        raise SpecterError("Cannot add wallet descriptor metadata to PSBT input")
+
+def fill_output_metadata(wallet: Wallet, psbt: PSBT, output_index: int, address: str):
+    output_descriptor = wallet.get_descriptor(address=address)
+    if not wallet.PSBTCls.fill_output(psbt.outputs[output_index], output_descriptor):
+        raise SpecterError("Cannot add wallet descriptor metadata to PSBT output")
+
+def wallet_psbt_from_embit_psbt(wallet: Wallet, psbt: PSBT):
+    # The alert transaction is not known to Core yet, so keep the witness UTXO
+    # and only ask Specter to add wallet descriptor metadata such as xpubs.
+    return wallet.PSBTCls(
+        wallet.fill_psbt(psbt.to_base64(), non_witness=False),
+        wallet.descriptor,
+        wallet.network,
+        devices=list(zip(wallet.keys, wallet.devices)),
+    )
+
 @timelockrecovery_endpoint.route("/")
 @login_required
 def index():
@@ -152,6 +175,10 @@ def step3_post():
         )
         psbt_creator.kwargs["readonly"] = True
         psbt = psbt_creator.create_psbt(wallet)
+        psbt = wallet.PSBTCls.from_string(psbt["base64"])
+        alert_address = TimelockrecoveryService.get_or_reserve_addresses(wallet)[0].address
+        fill_output_metadata(wallet, psbt, 0, alert_address)
+        psbt = wallet_psbt_from_embit_psbt(wallet, psbt).to_dict()
         request_data["alert_input_total_sats"] = _alert_input_total_sats_from_psbt(psbt)
 
         return render_template(
@@ -217,14 +244,8 @@ def step4_post():
             vout=[TransactionOutput(amount_sats, Script.from_address(address)) for (address, amount_sats, _label) in request_data["recovery_recipients"]],
             locktime=0,
         ))
-        recovery_psbt.inputs[0].witness_utxo = alert_tx.vout[0]
-
-        recovery_psbt = wallet.PSBTCls(
-            recovery_psbt.to_base64(),
-            wallet.descriptor,
-            wallet.network,
-            devices=list(zip(wallet.keys, wallet.devices)),
-        )
+        fill_alert_output_as_input_metadata(wallet, recovery_psbt, alert_tx)
+        recovery_psbt = wallet_psbt_from_embit_psbt(wallet, recovery_psbt)
 
         request_data["alert_raw"] = alert_raw
         request_data["alert_txid"] = alert_txid.hex()
@@ -292,14 +313,9 @@ def step5_post():
             vout=[TransactionOutput(request_data['cancellation_sats'], Script.from_address(cancellation_address))],
             locktime=0,
         ))
-        cancellation_psbt.inputs[0].witness_utxo = alert_tx.vout[0]
-
-        cancellation_psbt = wallet.PSBTCls(
-            cancellation_psbt.to_base64(),
-            wallet.descriptor,
-            wallet.network,
-            devices=list(zip(wallet.keys, wallet.devices)),
-        )
+        fill_alert_output_as_input_metadata(wallet, cancellation_psbt, alert_tx)
+        fill_output_metadata(wallet, cancellation_psbt, 0, cancellation_address)
+        cancellation_psbt = wallet_psbt_from_embit_psbt(wallet, cancellation_psbt)
 
         recovery_raw = request.form["recovery_raw"]
         recovery_tx = Transaction.from_string(recovery_raw)
