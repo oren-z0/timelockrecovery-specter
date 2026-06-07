@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 import logging
 import random
 import json
+import math
 from binascii import b2a_base64
 import uuid
 from flask import redirect, render_template, request, url_for
@@ -64,6 +65,22 @@ def _alert_input_total_sats_from_psbt(psbt: dict) -> int:
         if total > 0:
             return total
     raise SpecterError("Cannot derive alert input total from PSBT")
+
+
+def _normalize_amount_sats(amount, field_name: str) -> int:
+    """Return an integer satoshi amount for embit TransactionOutput values."""
+    if isinstance(amount, bool):
+        raise SpecterError(f"Invalid {field_name}")
+    if isinstance(amount, int):
+        amount_sats = amount
+    elif isinstance(amount, float) and math.isfinite(amount):
+        amount_sats = round(amount)
+    else:
+        raise SpecterError(f"Invalid {field_name}")
+    if amount_sats < 0:
+        raise SpecterError(f"Invalid {field_name}")
+    return amount_sats
+
 
 def transaction_weight(tx: Transaction, txsize: int) -> int:
     """
@@ -241,7 +258,13 @@ def step4_post():
                 vout=0,
                 sequence=sequence,
             )],
-            vout=[TransactionOutput(amount_sats, Script.from_address(address)) for (address, amount_sats, _label) in request_data["recovery_recipients"]],
+            vout=[
+                TransactionOutput(
+                    _normalize_amount_sats(amount_sats, "recovery recipient amount"),
+                    Script.from_address(address),
+                )
+                for (address, amount_sats, _label) in request_data["recovery_recipients"]
+            ],
             locktime=0,
         ))
         fill_alert_output_as_input_metadata(wallet, recovery_psbt, alert_tx)
@@ -310,7 +333,12 @@ def step5_post():
                 vout=0,
                 sequence=0xfffffffd,
             )],
-            vout=[TransactionOutput(request_data['cancellation_sats'], Script.from_address(cancellation_address))],
+            vout=[
+                TransactionOutput(
+                    _normalize_amount_sats(request_data['cancellation_sats'], "cancellation amount"),
+                    Script.from_address(cancellation_address),
+                )
+            ],
             locktime=0,
         ))
         fill_alert_output_as_input_metadata(wallet, cancellation_psbt, alert_tx)
