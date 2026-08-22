@@ -187,6 +187,7 @@ def step2():
         specter=app.specter,
         rand=rand,
         reserved_address=reserved_address,
+        services=app.specter.service_manager.services,
     )
 
 @timelockrecovery_endpoint.route("/step3", methods=["POST"])

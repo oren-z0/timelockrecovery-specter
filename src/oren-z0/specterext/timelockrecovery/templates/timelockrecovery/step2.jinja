@@ -6,6 +6,11 @@
 	{% include "includes/qr-scanner.html" %}
 	{% include "includes/recipient-box.html" %}
 	{% include "timelockrecovery/includes/timelockrecovery-fee-selection.html" %}
+	{% include "includes/services-data.html" %}
+	{% include "includes/hwi/hwi.jinja" %}
+	{% include "includes/explorer-link.html" %}
+	{% include "includes/address-data.html" %}
+	{% include "includes/address-label.html" %}
 
 	<div class="card">
 		<h2>Step 2: Prepare Alert and Recovery transactions for wallet {{ wallet.name }}</h2>
@@ -69,6 +74,11 @@
 								<input class="floating-input peer" type="text" class="address-label" name="alert_label" value="{{ reserved_address.label }}" placeholder=" " disabled />
 								<label class="floating-label">Address Label</label>
 							</div>
+						</div>
+						<div>
+							<button type="button" class="btn cursor-pointer" id="show-alert-address-data">
+								Show Address Data
+							</button>
 						</div>
 					</div>
 				</div>
@@ -155,9 +165,22 @@
 		<input type="hidden" name="action" value="prepare" />
 		<input id="next-form-data" type="hidden" name="request_data" value="" />
 	</form>
+	<div id="address-popup" class="hidden"></div>
 {% endblock %}
 
 {% block scripts %}
+	{% set supports_qr_code_verify = [] %}
+	{% for device in wallet.devices if device.qr_code_support_verify %}
+		{% set supports_qr_code_verify = supports_qr_code_verify.append(device) %}
+	{% endfor %}
+	{% set supports_hwi = [] %}
+	{% set supports_hwi_multisig_display_address = [] %}
+	{% for device in wallet.devices if device.supports_hwi_multisig_display_address %}
+		{% set supports_hwi_multisig_display_address = supports_hwi_multisig_display_address.append(device) %}
+	{% endfor %}
+	{% for device in wallet.devices if device.hwi_support %}
+		{% set supports_hwi = supports_hwi.append(device) %}
+	{% endfor %}
 	<script>
         const MIN_FEE_RATE = 1;
         const NETWORK = "Bitcoin";
@@ -564,6 +587,31 @@
 			document.getElementById('next-form').submit();
 		}
 
+		function showAlertAddressData() {
+			const addressData = {
+				address: {{ reserved_address.address | tojson }},
+				label: {{ reserved_address.label | tojson }},
+				used: {{ reserved_address.used | tojson }},
+				utxo: 0,
+				service_id: {{ reserved_address.service_id | tojson }},
+			};
+			const addressPopup = document.getElementById('address-popup');
+			addressPopup.innerHTML = `
+			<address-data
+				data-verify-qr="{{ supports_qr_code_verify != [] }}"
+				data-verify-hwi="{{ supports_hwi != [] and (supports_hwi_multisig_display_address != [] or not wallet.is_multisig) }}"
+				data-used="${addressData.used}"
+				data-utxo="${addressData.utxo}"
+				data-amount="0"
+				data-amount-price=""
+				data-address="${addressData.address}"
+				data-service-id="${addressData.service_id || ''}"
+				data-label="${addressData.label}"
+				data-address-wallet="{{ wallet.alias }}"
+			/>`;
+			showPageOverlay('address-popup', null, 'start');
+		}
+
 		document.addEventListener('DOMContentLoaded', () => {
 			const recipientBoxStyle = document.createElement('style');
 			recipientBoxStyle.textContent = `
@@ -587,6 +635,10 @@
 			document.getElementById('different-anchor-addresses-checkbox').addEventListener('input', toggleDifferentAnchorAddresses);
 			document.getElementById('different-anchor-addresses-input').addEventListener('input', simulateAlertTransaction);
 			document.getElementById('next-button').onclick = submitForm;
+			document.getElementById('show-alert-address-data').addEventListener('click', (event) => {
+				event.preventDefault();
+				showAlertAddressData();
+			});
 		});
 	</script>
 {% endblock %}
