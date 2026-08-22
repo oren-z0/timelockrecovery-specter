@@ -65,28 +65,22 @@ def _alert_input_total_sats_from_psbt(psbt: dict) -> int:
             return total
     raise SpecterError("Cannot derive alert input total from PSBT")
 
-_PSBT_MAGICS = (b"psbt\xff", b"pset\xff")
-
 def _normalize_psbt_payload(payload: str) -> str:
     """Handle UR:BYTES, Electrum base43, and hex PSBT payloads."""
     payload = payload.strip()
     if "UR:BYTES/" in payload.upper():
         payload = bcur2base64(payload).decode()
     try:
-        decoded_hex = bytes.fromhex(payload)
+        decoded = bytes.fromhex(payload)
     except ValueError:
-        decoded_hex = None
-    if decoded_hex is not None:
-        if decoded_hex[:5] in _PSBT_MAGICS:
-            return b2a_base64(decoded_hex).decode()
-        return payload
-    try:
-        decoded_b43 = b43_decode(payload)
-        if decoded_b43[:5] in _PSBT_MAGICS:
-            return b2a_base64(decoded_b43).decode()
-        return decoded_b43.hex()
-    except Exception:
-        return payload
+        try:
+            decoded = b43_decode(payload)
+        except Exception:
+            return payload
+        payload = decoded.hex()
+    if decoded[:5] in (b"psbt\xff", b"pset\xff"):
+        return b2a_base64(decoded).decode()
+    return payload
 
 
 def _parse_raw_tx(payload: str) -> Transaction:
