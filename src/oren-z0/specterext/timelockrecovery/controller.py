@@ -81,6 +81,9 @@ def transaction_weight(tx: Transaction, txsize: int) -> int:
 def fill_alert_output_as_input_metadata(wallet: Wallet, psbt: PSBT, alert_tx: Transaction):
     alert_output = alert_tx.vout[0]
     psbt.inputs[0].witness_utxo = alert_output
+    # Trezor requires the full previous transaction even for SegWit V0 inputs, due
+    # to Fee Overpayment Attack.
+    psbt.inputs[0].non_witness_utxo = alert_tx
     alert_address = TimelockrecoveryService.get_or_reserve_addresses(wallet)[0].address
     alert_descriptor = wallet.get_descriptor(address=alert_address)
     if not wallet.PSBTCls.fill_output(psbt.inputs[0], alert_descriptor):
@@ -92,10 +95,9 @@ def fill_output_metadata(wallet: Wallet, psbt: PSBT, output_index: int, address:
         raise SpecterError("Cannot add wallet descriptor metadata to PSBT output")
 
 def wallet_psbt_from_embit_psbt(wallet: Wallet, psbt: PSBT):
-    # The alert transaction is not known to Core yet, so keep the witness UTXO
-    # and only ask Specter to add wallet descriptor metadata such as xpubs.
+    # non_witness=False would strip non_witness_utxo, which Trezor requires.
     return wallet.PSBTCls(
-        wallet.fill_psbt(psbt.to_base64(), non_witness=False),
+        wallet.fill_psbt(psbt.to_base64(), non_witness=True),
         wallet.descriptor,
         wallet.network,
         devices=list(zip(wallet.keys, wallet.devices)),
