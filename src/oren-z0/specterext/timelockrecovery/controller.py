@@ -65,6 +65,47 @@ def _alert_input_total_sats_from_psbt(psbt: dict) -> int:
             return total
     raise SpecterError("Cannot derive alert input total from PSBT")
 
+_PSBT_MAGICS = (b"psbt\xff", b"pset\xff")
+
+def _normalize_psbt_payload(payload: str) -> str:
+    """Handle UR:BYTES, Electrum base43, and hex PSBT payloads."""
+    payload = payload.strip()
+    if "UR:BYTES/" in payload.upper():
+        payload = bcur2base64(payload).decode()
+    try:
+        decoded_hex = bytes.fromhex(payload)
+    except ValueError:
+        decoded_hex = None
+    if decoded_hex is not None:
+        if decoded_hex[:5] in _PSBT_MAGICS:
+            return b2a_base64(decoded_hex).decode()
+        return payload
+    try:
+        decoded_b43 = b43_decode(payload)
+        if decoded_b43[:5] in _PSBT_MAGICS:
+            return b2a_base64(decoded_b43).decode()
+        return decoded_b43.hex()
+    except Exception:
+        return payload
+
+
+def _parse_raw_tx(payload: str) -> Transaction:
+    payload = (payload or "").strip()
+    if not payload:
+        raise SpecterError("Missing raw transaction")
+    normalized = _normalize_psbt_payload(payload)
+    try:
+        return Transaction.from_string(normalized)
+    except Exception:
+        pass
+    if normalized.startswith(("cHNi", "cHNl")):
+        try:
+            return PSBT.from_string(normalized).tx
+        except Exception:
+            pass
+    raise SpecterError("Cannot parse transaction. Expected raw transaction hex.")
+
+
 def transaction_weight(tx: Transaction, txsize: int) -> int:
     """
     BIP-141 weight from serialized byte length and a parsed Transaction (embit).
@@ -227,7 +268,7 @@ def step4_post():
 
     if action == "prepare":
         alert_raw = request.form["alert_raw"]
-        alert_tx = Transaction.from_string(alert_raw)
+        alert_tx = _parse_raw_tx(alert_raw)
         alert_txid = alert_tx.txid()
 
         sequence = round(request_data["timelock_days"] * 24 * 60 * 60 / 512)
@@ -301,7 +342,7 @@ def step5_post():
     request_data = json.loads(request.form["request_data"])
 
     if action == "prepare":
-        alert_tx = Transaction.from_string(request_data["alert_raw"])
+        alert_tx = _parse_raw_tx(request_data["alert_raw"])
 
         cancellation_address = TimelockrecoveryService.get_or_reserve_addresses(wallet)[1].address
 
@@ -320,7 +361,7 @@ def step5_post():
         cancellation_psbt = wallet_psbt_from_embit_psbt(wallet, cancellation_psbt)
 
         recovery_raw = request.form["recovery_raw"]
-        recovery_tx = Transaction.from_string(recovery_raw)
+        recovery_tx = _parse_raw_tx(recovery_raw)
         request_data["recovery_raw"] = recovery_raw
         request_data["recovery_txid"] = recovery_tx.txid().hex()
         request_data["recovery_fee"] = alert_tx.vout[0].value - sum(
@@ -371,7 +412,7 @@ def step6_post():
     request_data = json.loads(request.form["request_data"])
     cancellation_raw = request.form.get("cancellation_raw", "")
     request_data["cancellation_raw"] = cancellation_raw
-    request_data["cancellation_txid"] = "" if cancellation_raw == "" else Transaction.from_string(cancellation_raw).txid().hex()
+    request_data["cancellation_txid"] = "" if cancellation_raw == "" else _parse_raw_tx(cancellation_raw).txid().hex()
     request_data["wallet_alias"] = wallet_alias
     request_data["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     request_data["created_at_utc"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -550,19 +591,7 @@ def combine_nonpending_psbt(wallet_alias):
     for i, psbt in enumerate(psbts):
         if not psbt:
             return _("Cannot parse empty data as PSBT"), 500
-        if "UR:BYTES/" in psbt.upper():
-            psbt = bcur2base64(psbt).decode()
-
-        # if electrum then it's base43
-        try:
-            decoded = b43_decode(psbt)
-            if decoded[:5] in [b"psbt\xff", b"pset\xff"]:
-                psbt = b2a_base64(decoded).decode()
-            else:
-                psbt = decoded.hex()
-        except:
-            pass
-
+        psbt = _normalize_psbt_payload(psbt)
         psbts[i] = psbt
         # psbt should start with cHNi
         # if not - maybe finalized hex tx
